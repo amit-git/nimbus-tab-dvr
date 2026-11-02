@@ -1,0 +1,415 @@
+<title>HLS and DASH Comparison</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+  /* Layout: one reading column; timelines and tables widen to the column's full measure and carry the argument. */
+  :root { --ground: #f6f5f1; --paper: #fdfcf9; --ink: #1f2124; --ink-2: #5a5e66; --rule: #d9d6cf; --record: #c8322b; --granted: #2b7a4b; --refused: #a04a1c; --tint: #ece9e1; --code: #efece5; --mark: #cfcabf; --series-a: #b8460e; --series-b: #2c6e9e; --sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif; --serif: "IBM Plex Serif", Georgia, serif; --mono: "IBM Plex Mono", Menlo, monospace; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ground: #17181b; --paper: #1e2024; --ink: #e8e6e0; --ink-2: #a3a39c; --rule: #34373d; --record: #ef5a4f; --granted: #5fc68a; --refused: #e8935a; --tint: #26292e; --code: #24272c; --mark: #464a52; --series-a: #d4702c; --series-b: #3f93d6; color-scheme: dark; } }
+  :root[data-theme="dark"] { --ground: #17181b; --paper: #1e2024; --ink: #e8e6e0; --ink-2: #a3a39c; --rule: #34373d; --record: #ef5a4f; --granted: #5fc68a; --refused: #e8935a; --tint: #26292e; --code: #24272c; --mark: #464a52; --series-a: #d4702c; --series-b: #3f93d6; color-scheme: dark; }
+  body { background: var(--ground); color: var(--ink); font-family: var(--sans); font-size: 16px; line-height: 1.55; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 64px; }
+  main { max-width: 880px; margin: 0 auto; min-width: 0; }
+  h1, h2 { font-family: var(--serif); font-weight: 600; text-wrap: balance; line-height: 1.2; }
+  h1 { font-size: 1.9rem; margin: 0 0 12px; }
+  h2 { font-size: 1.3rem; margin: 44px 0 12px; }
+  p, li { max-width: 68ch; }
+  p { margin: 10px 0; }
+  ul { padding-left: 20px; margin: 12px 0; }
+  li { margin-bottom: 7px; }
+  .eyebrow { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+  .eyebrow .rec::before { content: ""; display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--record); margin-right: 6px; vertical-align: 1px; }
+  .lede { font-size: 1.05rem; }
+  code, pre { font-family: var(--mono); font-size: 0.86em; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+  pre { background: var(--code); padding: 14px 16px; overflow-x: auto; margin: 12px 0 20px; line-height: 1.45; }
+  pre code { background: none; padding: 0; overflow-wrap: normal; font-size: 1em; }
+  .scroll { overflow-x: auto; margin: 12px 0 20px; border: 1px solid var(--rule); }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; font-variant-numeric: tabular-nums; background: var(--paper); }
+  th, td { text-align: left; padding: 7px 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  th { font-weight: 500; color: var(--ink-2); font-size: 0.8rem; letter-spacing: 0.03em; background: var(--tint); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.num, th.num { text-align: right; white-space: nowrap; }
+  figure { margin: 20px 0 8px; min-width: 0; }
+  .plot { position: relative; overflow-x: auto; background: var(--paper); border: 1px solid var(--rule); }
+  .plot svg { display: block; width: 100%; min-width: 660px; height: auto; }
+  figcaption { font-size: 0.88rem; color: var(--ink-2); margin-top: 8px; max-width: 68ch; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.85rem; margin: 0 0 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .key { display: inline-block; flex: none; }
+  .key.line { width: 18px; height: 2px; }
+  .key.bar { width: 18px; height: 12px; border-radius: 2px; background: var(--mark); }
+  .key.diamond { width: 10px; height: 10px; transform: rotate(45deg); background: var(--series-a); }
+  .tip { position: absolute; pointer-events: none; background: var(--paper); border: 1px solid var(--ink-2); padding: 6px 9px; font-size: 0.8rem; line-height: 1.4; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--granted); font-weight: 600; } .no { color: var(--refused); font-weight: 600; } .na { color: var(--ink-2); }
+  .two { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 8px 28px; }
+  .two > div { min-width: 0; }
+  h3 { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2); margin: 18px 0 6px; font-weight: 500; }
+  a { color: inherit; text-decoration-color: var(--record); text-underline-offset: 3px; }
+  a:focus-visible { outline: 2px solid var(--record); outline-offset: 2px; }
+  .colophon { margin-top: 56px; padding-top: 16px; border-top: 1px solid var(--rule); font-size: 0.85rem; color: var(--ink-2); font-family: var(--mono); overflow-wrap: anywhere; }
+</style>
+<main>
+  <div class="eyebrow"><span class="rec">Report</span><span>2026-11-02 10:24</span><span>nimbus-tab-dvr</span><span>main at 5799c0a</span></div>
+  <h1>HLS and DASH against the chunk upload: fragmented MP4 chunks could retire the remux, and native live playback does not hold</h1>
+  <p>Follows <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/docs/reports/2026-09-13-1302-demo.md">the demo report</a>, which built the upload and the remux this report compares against.</p>
+
+  <h2>Summary</h2>
+  <p class="lede">Today the extension uploads a recording in pieces, and the backend joins them into one video file at the end, which plays and scrubs well but cannot be watched until the recording finishes. HLS and DASH are the standard ways to stream video as many small files, and the question was whether streaming the pieces that way should replace the join. Those standards replace only the last step, and today's pieces cannot serve as their small files, because each piece depends on the ones before it. Two changed settings in Chrome's recorder make every piece a small playable file, measured on a test canvas in Chrome 154; the backend could then drop ffmpeg, a lost piece costs only its own two seconds, and the pieces still join into one scrubbable file. Chrome's built-in player handled finished HLS recordings well and recordings in progress badly, so viewing during a recording needs a player library. The recommendation is to change the chunk format when the upload path is next worked on, to add HLS only if the client wants viewing during a recording, and to skip DASH. Nothing was measured on real tab capture in the new format, and no product code changed.</p>
+
+  <h2>Result by option</h2>
+  <div class="scroll"><table><thead><tr><th>Option</th><th>Finished recording in Chrome</th><th>Viewing during a recording</th><th>Backend needs ffmpeg</th></tr></thead><tbody>
+<tr><td>Current WebM upload and remux</td><td><span class="ok">Plays and seeks</span></td><td><span class="no">Impossible</span></td><td>Yes</td></tr>
+<tr><td>HLS from today's chunks, through ffmpeg</td><td>Plays and seeks, with 7 s segments and a duration 1.684 s short</td><td><span class="na">Not tried</span></td><td>Yes</td></tr>
+<tr><td>HLS from fragmented MP4 chunks</td><td><span class="ok">Plays and seeks</span></td><td><span class="no">Native player unreliable</span></td><td>No, given a <code>moof</code> parser, which is unbuilt</td></tr>
+<tr><td>DASH</td><td><span class="no">Needs a player library</span></td><td><span class="no">Needs a player library</span></td><td>Depends on the segment format</td></tr>
+</tbody></table></div>
+
+  <h2>HLS and DASH define one stage of the pipeline</h2>
+  <p><strong>HLS and DASH define how a player pulls segments, so capture, the spool and the upload all stay.</strong> <a href="https://www.rfc-editor.org/rfc/rfc8216.txt">RFC 8216</a> says "The production of the source media is outside the scope of this document." Pushing media to a server is the separate <a href="https://dashif.org/Ingest/">DASH-IF Live Media Ingest</a> specification, whose HTTP POST or PUT to a receiver is the shape <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/src/extension/offscreen.ts#L63">offscreen.ts</a> already uses. The choice is what the backend publishes after the existing upload: one finished file, or a list of segments.</p>
+  <figure>
+    <div class="plot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 980 310" role="img" aria-label="The offscreen document posts chunks to the backend in both designs. Today the backend concatenates and runs ffmpeg into recording.webm, which the video element reads by range requests. With fragmented MP4 the backend stores chunks as uploaded and writes index.m3u8, which the video element reads. HLS and DASH define only the part from the published files to the player." style="color: var(--ink);">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor"/></marker>
+  </defs>
+  <g font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif" fill="currentColor">
+    <rect x="676" y="24" width="296" height="268" rx="8" fill="var(--tint)" stroke="var(--rule)"/>
+    <text x="690" y="46" font-size="12" font-weight="600">HLS and DASH define only this part</text>
+
+    <rect x="16" y="128" width="170" height="64" rx="4" fill="var(--paper)" stroke="currentColor"/>
+    <text x="30" y="155" font-size="13" font-weight="600">Offscreen document</text>
+    <text x="30" y="173" font-size="11" fill="var(--ink-2)">encodes, spools, uploads</text>
+    <path d="M186 160 L276 160" stroke="currentColor" fill="none" marker-end="url(#arrow)"/>
+    <text x="231" y="151" font-size="11" text-anchor="middle">POST chunk</text>
+    <rect x="276" y="128" width="110" height="64" rx="4" fill="var(--paper)" stroke="currentColor"/>
+    <text x="331" y="155" font-size="13" font-weight="600" text-anchor="middle">Backend</text>
+    <text x="331" y="173" font-size="11" fill="var(--ink-2)" text-anchor="middle">stores chunks</text>
+    <line x1="16" x2="386" y1="208" y2="208" stroke="var(--rule)"/>
+    <text x="16" y="226" font-size="11" fill="var(--ink-2)">Unchanged by either design</text>
+
+    <path d="M386 148 L418 148 L418 96 L448 96" stroke="currentColor" fill="none" marker-end="url(#arrow)"/>
+    <path d="M386 172 L418 172 L418 238 L448 238" stroke="currentColor" fill="none" marker-end="url(#arrow)"/>
+
+    <text x="448" y="58" font-size="11" font-weight="600" fill="var(--ink-2)">TODAY, AT STOP</text>
+    <rect x="448" y="66" width="190" height="60" rx="4" fill="var(--paper)" stroke="var(--series-a)" stroke-width="2"/>
+    <text x="462" y="91" font-size="12" font-weight="600">Concatenate, ffmpeg -c copy</text>
+    <text x="462" y="109" font-size="11" fill="var(--ink-2)">whole recording in one buffer</text>
+    <path d="M638 96 L694 96" stroke="currentColor" fill="none" marker-end="url(#arrow)"/>
+    <rect x="694" y="66" width="136" height="60" rx="4" fill="var(--paper)" stroke="currentColor"/>
+    <text x="708" y="91" font-size="12.5" font-family="IBM Plex Mono, Menlo, monospace" font-weight="500">recording.webm</text>
+    <text x="708" y="109" font-size="11" fill="var(--ink-2)">one file, with cues</text>
+    <path d="M830 96 L858 96 L858 146 L878 146" stroke="currentColor" fill="none" marker-end="url(#arrow)"/>
+    <text x="864" y="90" font-size="11">Range GET</text>
+
+    <text x="448" y="200" font-size="11" font-weight="600" fill="var(--ink-2)">FRAGMENTED MP4, AS EACH CHUNK LANDS</text>
+    <rect x="448" y="208" width="190" height="60" rx="4" fill="var(--paper)" stroke="currentColor"/>
+    <text x="462" y="233" font-size="12.5" font-weight="600">Chunks stored as uploaded</text>
+    <text x="462" y="251" font-size="11" fill="var(--ink-2)">init segment, then fragments</text>
+    <path d="M638 238 L694 238" stroke="currentColor" fill="none" marker-end="url(#arrow)"/>
+    <rect x="694" y="208" width="136" height="60" rx="4" fill="var(--paper)" stroke="currentColor"/>
+    <text x="708" y="233" font-size="12.5" font-family="IBM Plex Mono, Menlo, monospace" font-weight="500">index.m3u8</text>
+    <text x="708" y="251" font-size="11" fill="var(--ink-2)">one file, by cat, as well</text>
+    <path d="M830 238 L858 238 L858 174 L878 174" stroke="currentColor" fill="none" marker-end="url(#arrow)"/>
+    <text x="864" y="256" font-size="11">GET segments</text>
+
+    <rect x="878" y="128" width="86" height="64" rx="4" fill="var(--paper)" stroke="currentColor"/>
+    <text x="921" y="165" font-size="12.5" font-family="IBM Plex Mono, Menlo, monospace" font-weight="500" text-anchor="middle">&lt;video&gt;</text>
+  </g>
+</svg></div>
+    <figcaption>The outlined box is the hop fragmented MP4 chunks remove.</figcaption>
+  </figure>
+
+  <h2>Problem: today's chunks are byte cuts of one WebM stream</h2>
+  <p><strong>A chunk after the first cannot be a segment, because it opens neither alone nor on a keyframe.</strong> The measurements come from the recording <code>e9fa6cb0</code>, made in the dry run of 2026-09-13: real tab capture, a 2 s timeslice, 18 chunks, 10,163,730 bytes and 36.447 s.</p>
+  <ul>
+    <li><strong>Chunks do not open alone:</strong> <code>ffprobe</code> on chunks 2 and 9 reports "Invalid data found when processing input", and chunks 2 to 7 of every canvas run below do the same.</li>
+    <li><strong>Chunks start mid-cluster:</strong> chunks 2 to 18 reach their first cluster ID, <code>1F43B675</code>, 8 to 29 KB after the chunk starts.</li>
+    <li><strong>Keyframes ignore the timeslice:</strong> the encoder wrote a keyframe every 101 video packets, 6.7 to 7.1 s apart at 14.7 frames per second, and no chunk after the first starts on one.</li>
+    <li><strong>Stream-copy HLS inherits that spacing:</strong> <code>ffmpeg -c copy -f hls -hls_time 2</code> wrote segments of 6.699, 6.932, 7.136, 7.149, 6.816 and 0.031 s.</li>
+    <li><strong>Stream-copy HLS misstates the duration:</strong> those durations sum to 34.763 s for a 36.447 s recording, so the playlist is 1.684 s short, and ffmpeg warned "The segment duration may not be precise".</li>
+  </ul>
+
+  <h2>Solution: two MediaRecorder options make each chunk a segment</h2>
+  <p><strong><code>mimeType: 'video/mp4;codecs=vp9,opus'</code> and <code>videoKeyFrameIntervalDuration: 2000</code> turn the chunks into an init segment followed by fragments.</strong> The measurement ran on Google Chrome 154.0.8037.95, recording a canvas at 15 frames per second with an oscillator as audio, at a 2 s timeslice, for 40 s.</p>
+  <ul>
+    <li><strong>Chunk 1 is an init segment:</strong> it holds <code>ftyp</code> and <code>moov</code>, 1,200 bytes, and no media.</li>
+    <li><strong>Every later chunk starts on a keyframe:</strong> 19 of 19 did, read by <code>ffprobe</code> on the init followed by that chunk alone.</li>
+    <li><strong>Chunk length holds:</strong> chunks last 2.04 to 2.05 s, apart from the first media chunk at 4.08 s, which holds the keyframes at 0 and 2.035 s, and the last at 1.12 s.</li>
+    <li><strong>Chunks are whole boxes:</strong> in the 13 s runs each later chunk held only <code>moof</code> and <code>mdat</code> boxes, ended on a box boundary, and decoded with the init alone.</li>
+    <li><strong>Chunks play as HLS unmodified:</strong> a plain text playlist over the chunks loaded in a native <code>&lt;video&gt;</code>, seeked to 15 s and played on.</li>
+    <li><strong>Chunks concatenate into one seekable file:</strong> <code>cat</code> with no ffmpeg gave a file that <code>&lt;video&gt;</code> reported as 39.951 s, seeked to 15 s and played to 16.965 s.</li>
+  </ul>
+  <figure>
+    <div class="legend"><span><i class="key bar"></i>Chunk</span><span><i class="key diamond"></i>Keyframe</span></div>
+    <div class="plot"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 214" role="img" aria-label="Two timelines of media time. In the real WebM recording, 18 chunks of about 2 s carry keyframes about 7 s apart, and only the first chunk starts on a keyframe. In the fragmented MP4 canvas recording, all 19 media chunks start on a keyframe." style="color: var(--ink);">
+    <g font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif">
+      <line x1="136" x2="136" y1="20" y2="172" stroke="var(--rule)"/><text x="136" y="188" text-anchor="middle" font-size="11" fill="var(--ink-2)">0</text><line x1="318" x2="318" y1="20" y2="172" stroke="var(--rule)"/><text x="318" y="188" text-anchor="middle" font-size="11" fill="var(--ink-2)">10</text><line x1="500" x2="500" y1="20" y2="172" stroke="var(--rule)"/><text x="500" y="188" text-anchor="middle" font-size="11" fill="var(--ink-2)">20</text><line x1="682" x2="682" y1="20" y2="172" stroke="var(--rule)"/><text x="682" y="188" text-anchor="middle" font-size="11" fill="var(--ink-2)">30</text><line x1="864" x2="864" y1="20" y2="172" stroke="var(--rule)"/><text x="864" y="188" text-anchor="middle" font-size="11" fill="var(--ink-2)">40</text>
+      <text x="16" y="50" font-size="13" font-weight="600" fill="currentColor">WebM</text>
+      <text x="16" y="66" font-size="11" fill="var(--ink-2)">real tab, today</text>
+      <rect x="136.0" y="43" width="34.1" height="22" rx="2" fill="var(--mark)"><title>Chunk 1: 0.000 to 1.982 s</title></rect><rect x="172.1" y="43" width="34.7" height="22" rx="2" fill="var(--mark)"><title>Chunk 2: 1.982 to 3.999 s</title></rect><rect x="208.8" y="43" width="35.6" height="22" rx="2" fill="var(--mark)"><title>Chunk 3: 3.999 to 6.065 s</title></rect><rect x="246.4" y="43" width="35.0" height="22" rx="2" fill="var(--mark)"><title>Chunk 4: 6.065 to 8.099 s</title></rect><rect x="283.4" y="43" width="35.6" height="22" rx="2" fill="var(--mark)"><title>Chunk 5: 8.099 to 10.165 s</title></rect><rect x="321.0" y="43" width="34.4" height="22" rx="2" fill="var(--mark)"><title>Chunk 6: 10.165 to 12.166 s</title></rect><rect x="357.4" y="43" width="35.6" height="22" rx="2" fill="var(--mark)"><title>Chunk 7: 12.166 to 14.232 s</title></rect><rect x="395.0" y="43" width="34.4" height="22" rx="2" fill="var(--mark)"><title>Chunk 8: 14.232 to 16.232 s</title></rect><rect x="431.4" y="43" width="35.0" height="22" rx="2" fill="var(--mark)"><title>Chunk 9: 16.232 to 18.265 s</title></rect><rect x="468.4" y="43" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 10: 18.265 to 20.315 s</title></rect><rect x="505.7" y="43" width="35.0" height="22" rx="2" fill="var(--mark)"><title>Chunk 11: 20.315 to 22.349 s</title></rect><rect x="542.8" y="43" width="36.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 12: 22.349 to 24.448 s</title></rect><rect x="581.0" y="43" width="35.6" height="22" rx="2" fill="var(--mark)"><title>Chunk 13: 24.448 to 26.515 s</title></rect><rect x="618.6" y="43" width="35.6" height="22" rx="2" fill="var(--mark)"><title>Chunk 14: 26.515 to 28.582 s</title></rect><rect x="656.2" y="43" width="34.4" height="22" rx="2" fill="var(--mark)"><title>Chunk 15: 28.582 to 30.582 s</title></rect><rect x="692.6" y="43" width="35.9" height="22" rx="2" fill="var(--mark)"><title>Chunk 16: 30.582 to 32.664 s</title></rect><rect x="730.5" y="43" width="34.4" height="22" rx="2" fill="var(--mark)"><title>Chunk 17: 32.664 to 34.665 s</title></rect><rect x="766.9" y="43" width="30.4" height="22" rx="2" fill="var(--mark)"><title>Chunk 18: 34.665 to 36.447 s</title></rect><path d="M136.0 46 L142.0 54 L136.0 62 L130.0 54 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 0.000 s</title></path><path d="M257.9 46 L263.9 54 L257.9 62 L251.9 54 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 6.699 s</title></path><path d="M384.1 46 L390.1 54 L384.1 62 L378.1 54 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 13.631 s</title></path><path d="M514.0 46 L520.0 54 L514.0 62 L508.0 54 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 20.767 s</title></path><path d="M644.1 46 L650.1 54 L644.1 62 L638.1 54 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 27.916 s</title></path><path d="M768.1 46 L774.1 54 L768.1 62 L762.1 54 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 34.732 s</title></path>
+      <text x="136" y="85" font-size="11.5" fill="currentColor">1 of 18 chunks starts on a keyframe</text>
+      <text x="16" y="124" font-size="13" font-weight="600" fill="currentColor">Fragmented MP4</text>
+      <text x="16" y="140" font-size="11" fill="var(--ink-2)">canvas, two options</text>
+      <rect x="136.0" y="117" width="72.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 2: 0.000 to 4.080 s</title></rect><rect x="210.3" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 3: 4.080 to 6.124 s</title></rect><rect x="247.5" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 4: 6.124 to 8.171 s</title></rect><rect x="284.7" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 5: 8.171 to 10.219 s</title></rect><rect x="322.0" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 6: 10.219 to 12.262 s</title></rect><rect x="359.2" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 7: 12.262 to 14.308 s</title></rect><rect x="396.4" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 8: 14.308 to 16.352 s</title></rect><rect x="433.6" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 9: 16.352 to 18.400 s</title></rect><rect x="470.9" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 10: 18.400 to 20.449 s</title></rect><rect x="508.2" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 11: 20.449 to 22.491 s</title></rect><rect x="545.3" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 12: 22.491 to 24.537 s</title></rect><rect x="582.6" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 13: 24.537 to 26.584 s</title></rect><rect x="619.8" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 14: 26.584 to 28.633 s</title></rect><rect x="657.1" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 15: 28.633 to 30.678 s</title></rect><rect x="694.3" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 16: 30.678 to 32.720 s</title></rect><rect x="731.5" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 17: 32.720 to 34.769 s</title></rect><rect x="768.8" y="117" width="35.2" height="22" rx="2" fill="var(--mark)"><title>Chunk 18: 34.769 to 36.813 s</title></rect><rect x="806.0" y="117" width="35.3" height="22" rx="2" fill="var(--mark)"><title>Chunk 19: 36.813 to 38.860 s</title></rect><rect x="843.3" y="117" width="17.9" height="22" rx="2" fill="var(--mark)"><title>Chunk 20: 38.860 to 39.951 s</title></rect><path d="M136.0 120 L142.0 128 L136.0 136 L130.0 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 0.000 s</title></path><path d="M173.0 120 L179.0 128 L173.0 136 L167.0 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 2.035 s</title></path><path d="M210.3 120 L216.3 128 L210.3 136 L204.3 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 4.080 s</title></path><path d="M247.5 120 L253.5 128 L247.5 136 L241.5 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 6.124 s</title></path><path d="M284.7 120 L290.7 128 L284.7 136 L278.7 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 8.171 s</title></path><path d="M322.0 120 L328.0 128 L322.0 136 L316.0 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 10.219 s</title></path><path d="M359.2 120 L365.2 128 L359.2 136 L353.2 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 12.262 s</title></path><path d="M396.4 120 L402.4 128 L396.4 136 L390.4 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 14.308 s</title></path><path d="M433.6 120 L439.6 128 L433.6 136 L427.6 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 16.352 s</title></path><path d="M470.9 120 L476.9 128 L470.9 136 L464.9 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 18.400 s</title></path><path d="M508.2 120 L514.2 128 L508.2 136 L502.2 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 20.449 s</title></path><path d="M545.3 120 L551.3 128 L545.3 136 L539.3 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 22.491 s</title></path><path d="M582.6 120 L588.6 128 L582.6 136 L576.6 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 24.537 s</title></path><path d="M619.8 120 L625.8 128 L619.8 136 L613.8 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 26.584 s</title></path><path d="M657.1 120 L663.1 128 L657.1 136 L651.1 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 28.633 s</title></path><path d="M694.3 120 L700.3 128 L694.3 136 L688.3 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 30.678 s</title></path><path d="M731.5 120 L737.5 128 L731.5 136 L725.5 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 32.720 s</title></path><path d="M768.8 120 L774.8 128 L768.8 136 L762.8 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 34.769 s</title></path><path d="M806.0 120 L812.0 128 L806.0 136 L800.0 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 36.813 s</title></path><path d="M843.3 120 L849.3 128 L843.3 136 L837.3 128 Z" fill="var(--series-a)" stroke="var(--paper)" stroke-width="1.5"><title>Keyframe at 38.860 s</title></path>
+      <text x="136" y="159" font-size="11.5" fill="currentColor">19 of 19 media chunks start on a keyframe</text>
+      <text x="500" y="207" text-anchor="middle" font-size="11" fill="var(--ink-2)">Media time (s)</text>
+    </g>
+  </svg></div>
+    <figcaption>The two recordings differ in content, a real tab and a canvas, so the picture compares structure only. Hover a mark for its times.</figcaption>
+  </figure>
+  <div class="scroll"><table><thead><tr><th class="num">Chunk</th><th class="num">WebM, first video packet (s)</th><th class="num">WebM, keyframe inside (s)</th><th class="num">Fragmented MP4, first video packet (s)</th></tr></thead><tbody>
+<tr><td class="num">1</td><td class="num">0.000</td><td class="num">0.000</td><td class="num">init segment, no media</td></tr>
+<tr><td class="num">2</td><td class="num">1.982</td><td class="num"></td><td class="num">0.000</td></tr>
+<tr><td class="num">3</td><td class="num">3.999</td><td class="num"></td><td class="num">4.080</td></tr>
+<tr><td class="num">4</td><td class="num">6.065</td><td class="num">6.699</td><td class="num">6.124</td></tr>
+<tr><td class="num">5</td><td class="num">8.099</td><td class="num"></td><td class="num">8.171</td></tr>
+<tr><td class="num">6</td><td class="num">10.165</td><td class="num"></td><td class="num">10.219</td></tr>
+<tr><td class="num">7</td><td class="num">12.166</td><td class="num">13.631</td><td class="num">12.262</td></tr>
+<tr><td class="num">8</td><td class="num">14.232</td><td class="num"></td><td class="num">14.308</td></tr>
+<tr><td class="num">9</td><td class="num">16.232</td><td class="num"></td><td class="num">16.352</td></tr>
+<tr><td class="num">10</td><td class="num">18.265</td><td class="num"></td><td class="num">18.400</td></tr>
+<tr><td class="num">11</td><td class="num">20.315</td><td class="num">20.767</td><td class="num">20.449</td></tr>
+<tr><td class="num">12</td><td class="num">22.349</td><td class="num"></td><td class="num">22.491</td></tr>
+<tr><td class="num">13</td><td class="num">24.448</td><td class="num"></td><td class="num">24.537</td></tr>
+<tr><td class="num">14</td><td class="num">26.515</td><td class="num">27.916</td><td class="num">26.584</td></tr>
+<tr><td class="num">15</td><td class="num">28.582</td><td class="num"></td><td class="num">28.633</td></tr>
+<tr><td class="num">16</td><td class="num">30.582</td><td class="num"></td><td class="num">30.678</td></tr>
+<tr><td class="num">17</td><td class="num">32.664</td><td class="num"></td><td class="num">32.720</td></tr>
+<tr><td class="num">18</td><td class="num">34.665</td><td class="num">34.732</td><td class="num">34.769</td></tr>
+<tr><td class="num">19</td><td class="num"></td><td class="num"></td><td class="num">36.813</td></tr>
+<tr><td class="num">20</td><td class="num"></td><td class="num"></td><td class="num">38.860</td></tr>
+</tbody></table></div>
+  <p>In the fragmented MP4 column every first video packet is a keyframe, and the only other keyframe is at 2.035 s, inside chunk 2.</p>
+
+  <p><strong>The keyframe option is what makes MP4 chunks arrive at all.</strong> Five option sets ran at once on one canvas for 13 s, at a 2 s timeslice and 3 Mbit/s, on Chrome 154:</p>
+  <div class="scroll"><table><thead><tr><th>Option set</th><th class="num">Chunks</th><th>Keyframes (s)</th><th>Later chunks decode alone</th></tr></thead><tbody>
+<tr><td><code>video/webm;codecs=vp9,opus</code></td><td class="num">7</td><td>0, 6.726</td><td><span class="no">No</span></td></tr>
+<tr><td>The same, keyframes at 2000 ms</td><td class="num">7</td><td>0, then every 2.04</td><td><span class="no">No</span></td></tr>
+<tr><td><code>video/mp4;codecs=avc1.42E01E,mp4a.40.2</code></td><td class="num">2</td><td>0, 6.727</td><td><span class="no">Yes, but one chunk of 1,381,384 bytes arrived at stop</span></td></tr>
+<tr><td>The same, keyframes at 2000 ms</td><td class="num">7</td><td>0, then every 2.04</td><td><span class="ok">Yes</span></td></tr>
+<tr><td><code>video/mp4;codecs=vp9,opus</code>, keyframes at 2000 ms</td><td class="num">7</td><td>0, then every 2.04</td><td><span class="ok">Yes</span></td></tr>
+</tbody></table></div>
+  <p>For MP4, decoding alone means with the init prepended. Playwright's Chromium 153.0.8010.12 matched Chrome on all three VP9 rows and spaced H.264 keyframes irregularly, 0.13 to 2.05 s apart, so the H.264 result belongs to branded Chrome. The 2000 ms interval did not grow the WebM: 1,468,602 against 1,586,017 bytes on Chrome, and 1,460,481 against 1,616,339 on Chromium, because the bitrate target holds the size and the cost, if any, lands on picture quality, which was not measured.</p>
+
+  <h2>The two designs compared</h2>
+  <div class="scroll"><table><thead><tr><th></th><th>Current upload and remux</th><th>HLS with fragmented MP4 chunks</th></tr></thead><tbody>
+<tr><td>Viewing during a recording</td><td>Impossible until finalize</td><td>Possible, with the limits below</td></tr>
+<tr><td>Player in Chrome</td><td><code>&lt;video&gt;</code></td><td><code>&lt;video&gt;</code>, native in Chromium 153 and Chrome 154</td></tr>
+<tr><td>Container</td><td>WebM</td><td>Fragmented MP4; RFC 8216 says "Transport of other media file formats is not defined."</td></tr>
+<tr><td>Finalize</td><td>Concatenate and <code>ffmpeg -c copy</code>: 0.03 s for this recording</td><td>Append <code>#EXT-X-ENDLIST</code></td></tr>
+<tr><td>Backend memory at finalize</td><td>The whole recording, in one buffer under the store's one mutex (<a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/backend/store.go#L142">store.go</a>)</td><td>One chunk</td></tr>
+<tr><td>Backend tools</td><td>ffmpeg and ffprobe</td><td>None, given a <code>moof</code> parser for durations, which is unbuilt</td></tr>
+<tr><td>A lost chunk</td><td>The recording never finalizes (<a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/src/extension/offscreen.ts#L191">offscreen.ts</a>)</td><td>The playlist omits that segment</td></tr>
+<tr><td>A lost first chunk</td><td>File unreadable: "EBML header parsing failed"</td><td>Unreadable as well, though the init is 1,200 bytes</td></tr>
+<tr><td>Stored for one hour, extrapolated</td><td>One file of 1.00 GB</td><td>1,756 segments and a playlist, with the one file available by concatenating</td></tr>
+<tr><td>Authorization</td><td>One URL</td><td>The playlist and every segment</td></tr>
+<tr><td>Adaptive bitrate</td><td>None</td><td>None, since it needs a transcoder and <code>-c copy</code> avoids one</td></tr>
+</tbody></table></div>
+  <pre><code>10,163,730 B x 8 / 36.447 s = 2.23 Mbit/s
+2.23 Mbit/s x 3600 s / 8 = 1.00 GB
+3600 s / 2.05 s = 1,756 segments</code></pre>
+  <p><strong>Adaptive bitrate and CDN fan-out are the usual reasons to adopt these protocols, and a recording with one rendition and few viewers uses neither.</strong> The client's viewer count is not known. The current design's own advantage is that one file and one URL are already tested end to end across every demo beat.</p>
+
+  <h2>A lost chunk costs 4.475 s today and one segment with fragmented MP4</h2>
+  <p><strong>Removing chunk 9 from the real recording, 16.232 to 18.215 s, lost picture until the next keyframe.</strong></p>
+  <ul>
+    <li><strong>The remux survives:</strong> <code>ffmpeg -c copy</code> succeeded with chunk 9 removed, and the file kept its 36.447 s duration.</li>
+    <li><strong>Decoded frames fell by 62:</strong> 537 became 475, which is the 25 packets in chunk 9 and the 37 that failed to decode afterwards.</li>
+    <li><strong>The picture gap is more than twice the chunk:</strong> 20.767 s, the next keyframe, minus 16.292 s, the last packet before the hole, is 4.475 s.</li>
+    <li><strong>The file recovers at the keyframe:</strong> a frame at 22 s matches the intact file exactly, with PSNR reported as <code>inf</code>.</li>
+    <li><strong>The backend never reaches this path:</strong> a missing chunk stops the extension posting stop, so today's recording stays unfinalized.</li>
+  </ul>
+  <p>A VOD playlist with one fragmented MP4 segment removed, marked <code>#EXT-X-DISCONTINUITY</code>, loaded in Chrome 154 with a duration of 37.946 s against 39.951 s, seeked to 15 s and played to 16.963 s. Playing across the hole, rather than seeking past it, was not measured.</p>
+
+  <h2>Problem: native live playback in Chrome 154 does not hold</h2>
+  <p><strong>The same chunks that play well as a finished recording fail in three ways while the recording is live.</strong> <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/docs/reports/2026-11-02-1024-hls-dash-comparison/live.mjs">live.mjs</a> uploads each chunk as it is emitted and appends it to a playlist with <code>#EXT-X-TARGETDURATION:5</code>; native <code>&lt;video&gt;</code> players opened at different moments in the one recording. "Behind" is seconds since <code>recorder.start()</code> on the page's <code>performance.now()</code>, minus <code>video.currentTime</code>.</p>
+  <ul>
+    <li><strong>Opening early is fatal:</strong> the player errored with 6.12 s of media in the playlist and played with 12.26 s, and the threshold between them was not sought.</li>
+    <li><strong>Playback starts at media time 0:</strong> the player does not join at the live edge, so it stays behind by the recording's age when it opened.</li>
+    <li><strong>The end of the list truncates a player behind the edge:</strong> when <code>#EXT-X-ENDLIST</code> arrived at about 40 s, both open players stopped within 10 s, at 33.915 and 25.740 s, short of the 39.951 s recording.</li>
+  </ul>
+  <figure>
+    <div class="legend"><span><i class="key line" style="background: var(--ink-2)"></i>Encoded</span><span><i class="key line" style="background: var(--series-a)"></i>Player opened after chunk 6</span><span><i class="key line" style="background: var(--series-b)"></i>Player opened after chunk 10</span></div>
+    <div class="plot" id="live-plot"><svg id="live-chart" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 366" role="img" aria-label="Media time against seconds since the recorder started. Encoding reaches 39.95 s at 40 s. The player opened after chunk 6 runs parallel 13 s behind and ends at 33.9 s; the player opened after chunk 10 runs 21 s behind and ends at 25.7 s. A player opened after chunk 3 fails at once." style="color: var(--ink);">
+    <g font-family="IBM Plex Sans, Helvetica Neue, Arial, sans-serif">
+      <line x1="52" x2="716" y1="308" y2="308" stroke="var(--rule)"/><text x="44" y="312" text-anchor="end" font-size="11" fill="var(--ink-2)">0</text><line x1="52" x2="716" y1="235.5" y2="235.5" stroke="var(--rule)"/><text x="44" y="239.5" text-anchor="end" font-size="11" fill="var(--ink-2)">10</text><line x1="52" x2="716" y1="163" y2="163" stroke="var(--rule)"/><text x="44" y="167" text-anchor="end" font-size="11" fill="var(--ink-2)">20</text><line x1="52" x2="716" y1="90.5" y2="90.5" stroke="var(--rule)"/><text x="44" y="94.5" text-anchor="end" font-size="11" fill="var(--ink-2)">30</text><line x1="52" x2="716" y1="18" y2="18" stroke="var(--rule)"/><text x="44" y="22" text-anchor="end" font-size="11" fill="var(--ink-2)">40</text>
+      <text x="52" y="326" text-anchor="middle" font-size="11" fill="var(--ink-2)">0</text><text x="184.8" y="326" text-anchor="middle" font-size="11" fill="var(--ink-2)">10</text><text x="317.6" y="326" text-anchor="middle" font-size="11" fill="var(--ink-2)">20</text><text x="450.4" y="326" text-anchor="middle" font-size="11" fill="var(--ink-2)">30</text><text x="583.2" y="326" text-anchor="middle" font-size="11" fill="var(--ink-2)">40</text><text x="716" y="326" text-anchor="middle" font-size="11" fill="var(--ink-2)">50</text>
+      <text x="384" y="350" text-anchor="middle" font-size="11" fill="var(--ink-2)">Seconds since recorder.start()</text>
+      <text transform="translate(14 163) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--ink-2)">Media time (s)</text>
+      <line x1="583.2" x2="583.2" y1="18" y2="308" stroke="var(--ink-2)"/>
+      <text x="589.2" y="38" font-size="11" font-family="IBM Plex Mono, Menlo, monospace" fill="var(--ink-2)">#EXT-X-ENDLIST</text>
+      <line x1="582.5360000000001" x2="716" y1="18.36249999999998" y2="18.36249999999998" stroke="var(--ink-2)"/>
+      <text x="728" y="22.36249999999998" font-size="12" fill="currentColor">Recording: 39.951 s</text>
+      <path d="M52.0 308.0 L582.5 18.4" fill="none" stroke="var(--ink-2)" stroke-width="2" stroke-linecap="round"/>
+      <text x="277.76" y="148.5" text-anchor="end" font-size="12" fill="currentColor">Encoded</text>
+      <path d="M216.5 308.0 L251.2 289.9 L317.6 253.6 L384.0 217.4 L450.4 186.2 L516.8 149.9 L583.2 113.7 L649.6 77.4 L716.0 62.2" fill="none" stroke="var(--series-a)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M324.9 308.0 L384.0 276.1 L450.4 239.8 L516.8 205.1 L583.2 173.1 L649.6 136.9 L716.0 121.7" fill="none" stroke="var(--series-b)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="716" cy="62.22500000000001" r="5" fill="var(--series-a)" stroke="var(--paper)" stroke-width="2"/>
+      <circle cx="716" cy="121.67500000000001" r="5" fill="var(--series-b)" stroke="var(--paper)" stroke-width="2"/>
+      <text x="728" y="60.22500000000001" font-size="12" fill="currentColor">Opened after chunk 6</text>
+      <text x="728" y="75.22500000000001" font-size="12" fill="var(--ink-2)">ended at 33.915 s</text>
+      <text x="728" y="119.67500000000001" font-size="12" fill="currentColor">Opened after chunk 10</text>
+      <text x="728" y="134.675" font-size="12" fill="var(--ink-2)">ended at 25.740 s</text>
+      <path d="M129.336 303 L139.336 313 M129.336 313 L139.336 303" stroke="var(--refused)" stroke-width="2" stroke-linecap="round" fill="none"/>
+      <text x="112.33600000000001" y="296" font-size="11.5" fill="currentColor">Chunk 3: fatal error</text>
+      <line id="live-cross" x1="0" x2="0" y1="18" y2="308" stroke="currentColor" visibility="hidden"/>
+      <rect id="live-hit" x="52" y="18" width="664" height="290" fill="transparent"/>
+    </g>
+  </svg><div class="tip" id="live-tip" hidden></div></div>
+    <figcaption>Each player runs parallel to encoding at its own fixed lag and then stops below the recording's length. Hover for the sampled values.</figcaption>
+  </figure>
+  <div class="scroll"><table><thead><tr><th class="num">Seconds since <code>recorder.start()</code></th><th class="num">Encoded to (s)</th><th class="num">Opened after chunk 6 (s)</th><th class="num">Opened after chunk 10 (s)</th></tr></thead><tbody>
+<tr><td class="num">5</td><td class="num">5</td><td class="num"><span class="na">not open</span></td><td class="num"><span class="na">not open</span></td></tr>
+<tr><td class="num">10</td><td class="num">10</td><td class="num"><span class="na">not open</span></td><td class="num"><span class="na">not open</span></td></tr>
+<tr><td class="num">15</td><td class="num">15</td><td class="num">2.5</td><td class="num"><span class="na">not open</span></td></tr>
+<tr><td class="num">20</td><td class="num">20</td><td class="num">7.5</td><td class="num"><span class="na">not open</span></td></tr>
+<tr><td class="num">25</td><td class="num">25</td><td class="num">12.5</td><td class="num">4.4</td></tr>
+<tr><td class="num">30</td><td class="num">30</td><td class="num">16.8</td><td class="num">9.4</td></tr>
+<tr><td class="num">35</td><td class="num">35</td><td class="num">21.8</td><td class="num">14.2</td></tr>
+<tr><td class="num">40</td><td class="num">39.95</td><td class="num">26.8</td><td class="num">18.6</td></tr>
+<tr><td class="num">45</td><td class="num">39.95</td><td class="num">31.8</td><td class="num">23.6</td></tr>
+<tr><td class="num">50</td><td class="num">39.95</td><td class="num">33.9, ended</td><td class="num">25.7, ended</td></tr>
+</tbody></table></div>
+  <div class="scroll"><table><thead><tr><th>Opened after chunk</th><th class="num">Media in the playlist (s)</th><th class="num">Opened at (s)</th><th>Result</th><th class="num">Behind while playing (s)</th><th class="num">Ended at, of 39.951 s</th></tr></thead><tbody>
+<tr><td>2, in an earlier 36 s run</td><td class="num">4.07</td><td class="num">4.18</td><td><code>DEMUXER_ERROR_COULD_NOT_PARSE</code></td><td class="num"></td><td class="num"></td></tr>
+<tr><td>3</td><td class="num">6.12</td><td class="num">6.20</td><td><code>DEMUXER_ERROR_COULD_NOT_PARSE</code></td><td class="num"></td><td class="num"></td></tr>
+<tr><td>6</td><td class="num">12.26</td><td class="num">12.39</td><td>Played</td><td class="num">12.5 to 13.2</td><td class="num">33.915</td></tr>
+<tr><td>10</td><td class="num">20.46</td><td class="num">20.55</td><td>Played</td><td class="num">20.6 to 21.4</td><td class="num">25.740</td></tr>
+<tr><td>10, with no <code>EXT-X-PLAYLIST-TYPE</code></td><td class="num">20.46</td><td class="num">20.55</td><td>Played</td><td class="num">20.6 to 21.4</td><td class="num">25.740</td></tr>
+</tbody></table></div>
+  <p><strong>A conforming player would still sit about 17 s behind at this target duration.</strong> RFC 8216 says "the client SHOULD NOT choose a segment that starts less than three target durations from the end of the Playlist file", so:</p>
+  <pre><code>3 x 5 s target duration + 2 s timeslice = 17 s behind capture</code></pre>
+  <p>A usable live view therefore points at hls.js over Media Source Extensions, which is a dependency to raise under the budget in <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/CLAUDE.md">CLAUDE.md</a> and which was not tested. <code>MediaSource.isTypeSupported</code> returned true for <code>video/mp4; codecs="vp09.00.40.08"</code> and <code>audio/mp4; codecs="opus"</code> on both builds, which is necessary and not sufficient.</p>
+
+  <h2>DASH adds a player and removes nothing</h2>
+  <p><strong>Chrome has no native DASH, so DASH costs a library that HLS does not.</strong></p>
+  <ul>
+    <li><strong>Chrome refuses it:</strong> <code>canPlayType('application/dash+xml')</code> returned an empty string on both builds.</li>
+    <li><strong>The load fails:</strong> <code>&lt;video src="index.mpd"&gt;</code> reports <code>DEMUXER_ERROR_COULD_NOT_OPEN</code> on both builds.</li>
+    <li><strong>The library is over budget:</strong> dash.js or Shaka Player would be a new dependency, and neither was tested.</li>
+    <li><strong>WebM support does not rescue today's chunks:</strong> <code>ffmpeg -c copy -f dash</code> wrote WebM segments, 27 files for the 36.447 s recording, but they come from a remux, so the remux stays.</li>
+  </ul>
+
+  <h2>Recommendation: adopt the segment format, and add the playlist only for live viewing</h2>
+  <p><strong>Move the chunks to fragmented MP4 when the upload path is next worked on.</strong> It limits a lost chunk to its own segment, lets the client's backend finalize with no ffmpeg and no whole-recording buffer, keeps the one seekable file, and makes a playlist a small text endpoint if the client ever wants it. The change touches <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/src/extension/offscreen.ts#L14">the MIME candidates</a>, <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/src/extension/offscreen.ts#L97">the recorder options</a>, <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/backend/store.go#L121"><code>Finalize</code></a>, <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/backend/api.go#L128">the served content type</a> and <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/tests/demo.spec.ts#L140">the test's file name</a>. This report decides nothing: <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/CLAUDE.md">CLAUDE.md</a> keeps the upload path open, and no plan has been written.</p>
+  <div class="two">
+    <div>
+      <h3>Rejected</h3>
+      <ul>
+        <li><strong>ffmpeg generating HLS from today's WebM:</strong> it yields 7 s segments and a wrong duration, and ffmpeg stays.</li>
+        <li><strong>WebM with 2 s keyframes:</strong> the keyframes align, but the chunks still do not open alone.</li>
+        <li><strong>DASH:</strong> it needs a library and offers this project nothing over HLS.</li>
+        <li><strong>WebCodecs with a muxer of our own:</strong> it is more code for what MediaRecorder already emits.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Risks of the recommended change</h3>
+      <ul>
+        <li><strong>The keyframe option is required:</strong> H.264 in MP4 without it held 13 s of media until stop on Chrome 154, which would break chunks landing as they are encoded.</li>
+        <li><strong>Media lands later at the start:</strong> the first media chunk arrives at 4.1 s rather than 2 s, so a kill in the first 4 s loses more than the bound in <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/docs/GRILLING.md">GRILLING.md, 4b</a>.</li>
+        <li><strong>The fleet's Chrome version is unknown:</strong> the option was measured on Chromium 153 and Chrome 154, and the earliest version that honours it was not established.</li>
+        <li><strong>Durations need a source:</strong> <code>live.mjs</code> used <code>ffprobe</code> for each chunk, so dropping ffmpeg needs a <code>moof</code> parser in Go, which is unbuilt.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Verified and unverified</h2>
+  <div class="two">
+    <div>
+      <h3>Verified</h3>
+      <ul>
+        <li>The chunk structure, keyframe spacing and lost-chunk costs of the real recording <code>e9fa6cb0</code>, by <code>ffprobe</code> and <code>ffmpeg</code>.</li>
+        <li>Native HLS of VP9 and Opus in fragmented MP4, loaded, played and seeked, on Chromium 153.0.8010.12 and Chrome 154.0.8037.95.</li>
+        <li><code>timed.webm</code>, the current output format, as the positive control in the same harness: 36.447 s, played, seeked to 20 s on both builds.</li>
+        <li>The absence of native DASH on both builds.</li>
+        <li>The fragmented MP4 chunk structure on both builds for VP9, and on Chrome 154 for H.264.</li>
+        <li>The live failures in this report, on Chrome 154, across three recordings.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Unverified</h3>
+      <ul>
+        <li>Fragmented MP4 from real tab capture; every fragmented MP4 number comes from a headless canvas with an oscillator.</li>
+        <li>Any recording over 40 s, including seeking in an hour-long concatenated file, which has no index for the player to read.</li>
+        <li>Picture quality at 2 s keyframes on the client's application.</li>
+        <li>CPU cost of any option.</li>
+        <li>The loss on a killed offscreen document in the new format.</li>
+        <li>Playing across a hole in a playlist rather than seeking past it.</li>
+        <li>hls.js, dash.js and Shaka Player.</li>
+        <li>Safari and other browsers, which are out of scope in <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/docs/GRILLING.md">GRILLING.md, 3b</a>.</li>
+        <li>Seeking to the live edge by hand in the native player, which might remove the lag and was not tried.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Provenance</h2>
+  <ul>
+    <li><strong>Written at:</strong> <a href="https://github.com/njoubert/nimbus-tab-dvr/commit/5799c0a">5799c0a</a> on main, with no product code changed.</li>
+    <li><strong>Toolchain on the development Mac:</strong> Google Chrome 154.0.8037.95, Playwright 1.63.0 with Chromium 153.0.8010.12, Node 26.8.2, ffmpeg 9.0.1; Chrome and ffmpeg have moved since the demo report.</li>
+    <li><strong>Scripts:</strong> <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/docs/reports/2026-11-02-1024-hls-dash-comparison/probe.mjs">probe.mjs</a> for the five option sets and native playback, and <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/docs/reports/2026-11-02-1024-hls-dash-comparison/live.mjs">live.mjs</a> for the live players, the removed segment and the concatenation.</li>
+    <li><strong>Recording:</strong> <code>.build-demo/recordings/e9fa6cb0-757b-4e67-aa98-3114439247be</code>, started 2026-09-13 13:01 and untracked, so the numbers above are its only record in git.</li>
+    <li><strong>A failed control:</strong> the first removed-segment test cut two segments through a script error, its 31.92 s duration exposed the error, and the figures above come from the corrected run.</li>
+    <li><strong>A replicate:</strong> both scripts, re-run from this directory, reproduced every result, with the two live players ending at 33.983 and 25.784 s of a 39.960 s recording.</li>
+  </ul>
+  <pre><code>REC=$PWD/.build-demo/recordings/e9fa6cb0-757b-4e67-aa98-3114439247be
+REPORT=$PWD/docs/reports/2026-11-02-1024-hls-dash-comparison
+WORK=$(mktemp -d)
+cd "$WORK" &amp;&amp; mkdir hls2 dash
+ffprobe -v error -select_streams v:0 -show_entries packet=pts_time,pos,flags -of csv=p=0 "$REC/raw.webm" &gt; packets.csv
+ffmpeg -v error -y -i "$REC/raw.webm" -c copy timed.webm
+ffmpeg -v warning -y -i "$REC/raw.webm" -c copy -f hls -hls_segment_type fmp4 -hls_time 2 -hls_playlist_type vod -hls_segment_filename 'hls2/s%04d.m4s' hls2/index.m3u8
+ffmpeg -v warning -y -i "$REC/raw.webm" -c copy -f dash -seg_duration 2 -use_template 1 -use_timeline 1 dash/index.mpd
+ls "$REC"/*.chunk | grep -v 000009 | xargs cat &gt; no9.webm
+ffmpeg -v error -y -i no9.webm -c copy no9-out.webm
+ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of csv=p=0 no9-out.webm
+cd -
+node "$REPORT/probe.mjs" "$WORK"
+node "$REPORT/live.mjs" "$WORK"</code></pre>
+
+  <p class="colophon">Record: <a href="https://github.com/njoubert/nimbus-tab-dvr/blob/main/docs/reports/2026-11-02-1024-hls-dash-comparison.md">docs/reports/2026-11-02-1024-hls-dash-comparison.md</a>. Where this page and the markdown disagree, the markdown is right. Written at <a href="https://github.com/njoubert/nimbus-tab-dvr/commit/5799c0a">5799c0a</a>.</p>
+</main>
+<script>
+  (function () {
+    var samples = [{"t":5,"enc":5,"a":null,"b":null},{"t":10,"enc":10,"a":null,"b":null},{"t":15,"enc":15,"a":2.5,"b":null},{"t":20,"enc":20,"a":7.5,"b":null},{"t":25,"enc":25,"a":12.5,"b":4.4},{"t":30,"enc":30,"a":16.8,"b":9.4},{"t":35,"enc":35,"a":21.8,"b":14.2},{"t":40,"enc":39.95,"a":26.8,"b":18.6},{"t":45,"enc":39.95,"a":31.8,"b":23.6},{"t":50,"enc":39.95,"a":33.9,"b":25.7}];
+    var svg = document.getElementById('live-chart');
+    var hit = document.getElementById('live-hit');
+    var cross = document.getElementById('live-cross');
+    var tip = document.getElementById('live-tip');
+    var left = 52;
+    var right = 716;
+    function show(s) {
+      var x = left + (s.t / 50) * (right - left);
+      cross.setAttribute('x1', x);
+      cross.setAttribute('x2', x);
+      cross.setAttribute('visibility', 'visible');
+      tip.textContent = '';
+      [
+        s.t + ' s since start',
+        'Encoded to ' + s.enc + ' s',
+        'After chunk 6: ' + (s.a === null ? 'not open' : s.a + ' s'),
+        'After chunk 10: ' + (s.b === null ? 'not open' : s.b + ' s'),
+      ].forEach(function (line) {
+        var row = document.createElement('div');
+        row.textContent = line;
+        tip.appendChild(row);
+      });
+      tip.hidden = false;
+      var box = svg.getBoundingClientRect();
+      var scale = box.width / 880;
+      var px = x * scale;
+      var wide = tip.offsetWidth;
+      tip.style.left = (px + 12 + wide > box.width ? px - wide - 12 : px + 12) + 'px';
+      tip.style.top = '24px';
+    }
+    hit.addEventListener('pointermove', function (event) {
+      var box = svg.getBoundingClientRect();
+      var svgX = ((event.clientX - box.left) / box.width) * 880;
+      var t = ((svgX - left) / (right - left)) * 50;
+      var nearest = samples.reduce(function (best, s) {
+        return Math.abs(s.t - t) < Math.abs(best.t - t) ? s : best;
+      });
+      show(nearest);
+    });
+    hit.addEventListener('pointerleave', function () {
+      cross.setAttribute('visibility', 'hidden');
+      tip.hidden = true;
+    });
+  })();
+</script>
