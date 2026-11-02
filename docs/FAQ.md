@@ -45,12 +45,12 @@ If neither the press nor a launcher is acceptable, the extension is the wrong sh
 
 Chrome hands the extension a media stream of the tab's composited output: the frames Chrome itself draws for that tab, with every cross-origin iframe, canvas and video in place, plus the tab's audio.
 It is not a screenshot loop and the page is not asked to render anything twice; the compositor feeds the frames it already produces into a video track, at most `targetFps` per second, 15 by default, and at most 1920 by 1080.
-`MediaRecorder` encodes that track in the offscreen document, H.264 video and preferably AAC audio in fragmented MP4, at 3 Mbit/s by default.
-Frame rate, size and bitrate are configurable; recording requires H.264 MP4 support.
+`MediaRecorder` encodes that track in the offscreen document, H.265 video and preferably AAC audio in fragmented MP4, at 3 Mbit/s by default.
+Frame rate, size and bitrate are configurable; recording requires H.265 MP4 support.
 
 **The cost has not been profiled.**
 What is known is where it lands: the capture adds a frame copy on the compositor for that tab, and the encoder runs in the extension's offscreen process rather than in the page's renderer, so the page's own JavaScript is not blocked, but the two share the machine's CPU.
-The encoder now uses H.264; hardware acceleration and its actual CPU cost depend on the browser and machine and have not been profiled.
+The encoder now uses H.265; hardware acceleration and its actual CPU cost depend on the browser and machine and have not been profiled.
 The measurement to make before any claim is a recording of the client's actual application, watched in Chrome's task manager and Activity Monitor, and the frame rate and codec adjusted from there.
 
 ## Where are the frames stored, and how are they encoded?

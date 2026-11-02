@@ -12,7 +12,7 @@ import { putChunk, putRecording, updateChunk, updateRecording } from './db';
 
 const LOG = '[nimbus-tab-dvr offscreen]';
 
-const MIME_CANDIDATES = ['video/mp4;codecs=avc1.42001E,mp4a.40.2', 'video/mp4;codecs=avc1.42001E,opus'];
+const MIME_CANDIDATES = ['video/mp4;codecs=hvc1.1.6.L120.90,mp4a.40.2', 'video/mp4;codecs=hvc1.1.6.L120.90,opus'];
 
 interface Active {
   recordingId: string;
@@ -38,9 +38,9 @@ let active: Active | undefined;
 
 function pickMimeType(preferred: string | undefined, audio: boolean): string {
   const candidates = MIME_CANDIDATES.map((type) => audio ? type : type.split(',')[0]);
-  if (preferred && !candidates.includes(preferred)) throw new Error('Recording requires H.264 fragmented MP4');
+  if (preferred && !candidates.includes(preferred)) throw new Error('Recording requires H.265/HEVC fragmented MP4');
   const mimeType = (preferred ? [preferred] : candidates).find((type) => MediaRecorder.isTypeSupported(type));
-  if (!mimeType) throw new Error('H.264 MP4 recording is not supported by this browser');
+  if (!mimeType) throw new Error('H.265/HEVC MP4 recording is not supported by this browser');
   return mimeType;
 }
 

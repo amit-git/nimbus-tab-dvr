@@ -114,7 +114,7 @@ docs/
 - `chrome.tabCapture` grants capture only to a tab the user has invoked the extension on, or to the id in Chrome's `--allowlisted-extension-id` flag; force-install, `<all_urls>` and policy change nothing.
 - The branded Google Chrome ignores `--load-extension`; the test runs in Playwright's Chromium for that reason, and a real Chrome gets the extension only from the Web Store, a managed force-install, or developer mode by hand.
 - Chrome force-installs an off-store extension only on a machine it detects as enterprise managed, and a user-level `defaults write` arrives as a Recommended policy, not a Mandatory one.
-- Recording requires H.264 fragmented MP4; the extension splits complete fragments and reads sample durations, and the backend stores bytes unchanged and builds HLS.
+- Recording requires H.265 fragmented MP4; the extension splits complete fragments and reads sample durations, and the backend stores bytes unchanged and builds HLS.
 - `osascript` keystrokes need an Accessibility grant for the terminal, which an agent cannot give itself; with it, a real press of the `commands` shortcut is the invocation Chrome wants, and Playwright's keyboard never is.
 - A content script is a classic script: it may import types and nothing else, and `build.sh` fails the build if an import survives.
 

@@ -63,8 +63,8 @@ A fleet's Chrome is not launched with the flag; there, one press of Cmd+Shift+Y 
 
 ## Recording and playback contract
 
-The extension records H.264 in fragmented MP4, preferring AAC audio and falling back to Opus if AAC recording is unavailable.
-It refuses unsupported codecs rather than falling back to VP9 or WebM.
+The extension records H.265/HEVC (`hvc1.1.6.L120.90`, Main profile, Level 4) in fragmented MP4, preferring AAC audio and falling back to Opus if AAC recording is unavailable.
+It reports an error if the browser cannot record HEVC; it does not fall back to AVC, VP9 or WebM.
 The extension separates the MP4 initialization data and complete `moof`/`mdat` fragments without changing their bytes, then spools and uploads them in order.
 `timesliceMs` controls recorder callbacks; callbacks can contain partial boxes or multiple fragments, so callback counts and uploaded segment counts can differ.
 

@@ -26,7 +26,7 @@ The repository is a handoff: the extension and the demo are here, the client's b
 **1c.** What does the user do with a recording once it exists?
 
 **Answer:** Nothing, locally.
-The extension produces H.264 fragmented MP4 and uploads initialization data, complete media fragments and timing metadata to the client's backend.
+The extension produces H.265 fragmented MP4 and uploads initialization data, complete media fragments and timing metadata to the client's backend.
 The backend stores those bytes unchanged and publishes an HLS event playlist; hls.js provides playback and seeking.
 
 ---

@@ -109,7 +109,7 @@ test('chunks land live and HLS finalizes with duration and seeking', async () =>
   await expect
     .poll(async () => (await backendRecording(id))?.chunks ?? 0, { timeout: 15_000, message: 'chunks landing' })
     .toBeGreaterThanOrEqual(2);
-  expect(String(started.mimeType)).toContain('avc1');
+  expect(String(started.mimeType)).toContain('hvc1');
   const live = await backendRecording(id);
   finding(`while recording: backend has ${live?.chunks} chunks, ${live?.bytes} bytes, state ${live?.state}`);
   expect(live?.state).toBe('recording');
@@ -229,7 +229,7 @@ test('a closed tab ends the recording and its last chunks still land', async () 
   await landing.close();
 });
 
-test('H.264 video-only recording plays through HLS', async () => {
+test('H.265 video-only recording plays through HLS', async () => {
   const page = await context.newPage();
   const started = await startRecording(page, false);
   expect(started.audio).toBe(false);

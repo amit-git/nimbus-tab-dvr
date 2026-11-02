@@ -56,7 +56,7 @@
 
     <rect x="440" y="390" width="400" height="130" rx="6" fill="#fff" stroke="#1c1c1c"/>
     <text x="455" y="415" font-size="13" font-weight="600">Offscreen document: the data plane</text>
-    <text x="455" y="435" font-size="11">getUserMedia → MediaRecorder, H.264 + AAC in MP4</text>
+    <text x="455" y="435" font-size="11">getUserMedia → MediaRecorder, H.265 + AAC in MP4</text>
     <text x="455" y="453" font-size="11">complete MP4 fragments; performance.now() callback timing</text>
     <text x="455" y="471" font-size="11">writes the chunk, then uploads it: in order, one in flight</text>
     <text x="455" y="489" font-size="11">after the last upload, posts stop and reports finalized</text>
