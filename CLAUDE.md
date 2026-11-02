@@ -1,7 +1,7 @@
 # Nimbus Tab DVR: notes for agents
 
 A digital video recorder for a browser tab: a Manifest V3 Chrome extension in TypeScript that records the tab a host web application asks it to, and a demo application that stands in for that host.
-The capture feasibility spike is proven and reported, and the demo that sells the concept is built: each chunk uploads to a demo backend in Go that remuxes with ffmpeg and plays it back; the application contract waits behind it.
+The capture feasibility spike is proven and reported, and the demo that sells the concept is built: each chunk uploads to a demo backend in Go that publishes HLS for playback with hls.js; the application contract waits behind it.
 [README.md](README.md) is the user-facing description; read it first and keep it true when behaviour changes.
 This file is the rest: how to work here, and what has already been decided.
 
@@ -24,9 +24,9 @@ The prek hook enforces the line rule; the rest is on you.
 - **Decisions, not options.** Surface the alternatives you rejected in one line each, then recommend.
 - **`prek` must pass.** `./provision.sh` installs the hooks; `./build.sh check` runs them over every file and then `tsc`, and it must pass before you claim done.
   `prek run --all-files` means every tracked file, so `git add` a new file before `./build.sh check` or the commit hook will be the first thing to see it.
-- **The dependency budget is TypeScript, Vite and Playwright**, plus type-only packages, and for the backend the Go standard library and nothing else.
+- **The dependency budget is TypeScript, Vite, Playwright and hls.js**, plus type-only packages, and for the backend the Go standard library and nothing else.
   Adding anything else is a decision to raise, not a line in `package.json` or `go.mod`.
-  `ffmpeg` is a tool on the Mac that `provision.sh` installs, used by the demo backend and the tests, not a package.
+  `ffmpeg` is a tool on the Mac that `provision.sh` installs, used only by the capture spike tests, not a package.
 - **Never disable a hook to get past it.** Shellcheck runs at its default severity, so `A && B || true` is flagged; write an `if`.
 - **Documentation tasks are documentation-only.** When the task is to record something, the deliverable is the document; offer the implementation as a next step and wait.
 - **The unanswered questions in [docs/GRILLING.md](docs/GRILLING.md) are unanswered.** Do not build past one; ask it.
@@ -53,7 +53,7 @@ The prek hook enforces the line rule; the rest is on you.
 ```text
 build.sh                  build | test | fmt | check | clean; `./build.sh nonsense` prints help
 provision.sh              a development Mac: the toolchain, npm, Go, Playwright's Chromium, the git hooks
-backend/                  the demo backend in Go, standard library only: the recordings API, the ffmpeg remux, the demo pages embedded
+backend/                  the demo backend in Go, standard library only: the recordings API, the HLS event playlist, the demo pages embedded
   static/                 where build.sh copies dist/demo for go:embed; only .gitkeep is tracked
 src/
   shared/protocol.ts      the messages between page, content script, service worker and offscreen document
@@ -114,7 +114,7 @@ docs/
 - `chrome.tabCapture` grants capture only to a tab the user has invoked the extension on, or to the id in Chrome's `--allowlisted-extension-id` flag; force-install, `<all_urls>` and policy change nothing.
 - The branded Google Chrome ignores `--load-extension`; the test runs in Playwright's Chromium for that reason, and a real Chrome gets the extension only from the Web Store, a managed force-install, or developer mode by hand.
 - Chrome force-installs an off-store extension only on a machine it detects as enterprise managed, and a user-level `defaults write` arrives as a Recommended policy, not a Mandatory one.
-- A MediaRecorder WebM carries no duration or cues; measure a file by decoding it, and let the backend remux.
+- Recording requires H.264 fragmented MP4; the extension splits complete fragments and reads sample durations, and the backend stores bytes unchanged and builds HLS.
 - `osascript` keystrokes need an Accessibility grant for the terminal, which an agent cannot give itself; with it, a real press of the `commands` shortcut is the invocation Chrome wants, and Playwright's keyboard never is.
 - A content script is a classic script: it may import types and nothing else, and `build.sh` fails the build if an import survives.
 

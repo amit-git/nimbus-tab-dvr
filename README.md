@@ -6,7 +6,7 @@
 
 <p align="center">
   A Manifest V3 Chrome extension that records the tab a host web application asks it to, with a demo application standing in for the host.
-  The capture feasibility spike is done and <a href="docs/reports/2026-09-09-2343-capture-feasibility-spike.md">reported</a>, and the demo is built: every chunk lands on a demo backend as it is encoded, the backend remuxes the recording with ffmpeg, and the demo application plays it back seekable.
+  The capture feasibility spike is done and <a href="docs/reports/2026-09-09-2343-capture-feasibility-spike.md">reported</a>, and the demo is built: every chunk lands on a demo backend as it is encoded, the backend publishes an ongoing HLS playlist without remuxing or encoding, and the demo plays it through hls.js with seeking.
   The application contract waits behind the demo, and the client deploys through Jamf to managed Chrome.
 </p>
 
@@ -28,7 +28,7 @@ See [CLAUDE.md, "Landing work"](CLAUDE.md#landing-work-branches-and-pull-request
 
 ## How it works
 
-![How a recording moves: the page asks through the content script, the service worker gets a stream id from Chrome and hands it to the offscreen document, which encodes, spools every chunk to IndexedDB and uploads it in order to the demo backend, which remuxes with ffmpeg into a file the landing page plays](docs/how-it-works.svg)
+![How a recording moves: the page asks through the content script, the service worker gets a stream id from Chrome and hands it to the offscreen document, which encodes, spools every chunk to IndexedDB and uploads it in order to the demo backend, which publishes an HLS playlist the landing page plays with hls.js](docs/how-it-works.svg)
 
 The page never holds a channel to the extension: it posts a message on its own window, the content script relays it, and the service worker validates the origin and the message before anything happens.
 Capture is granted per tab, by one press of Cmd+Shift+Y or by the allowlist flag at launch; the offscreen document owns the stream, the encoder and the spool, and every chunk is durable locally before it is uploaded.
@@ -54,12 +54,40 @@ Capture is granted per tab, by one press of Cmd+Shift+Y or by the allowlist flag
 2. `scripts/demo/chrome.sh` launches Google Chrome on a throwaway profile with the extension's id allowlisted for tab capture.
    The branded Chrome ignores `--load-extension`, so on the first launch it opens `chrome://extensions`: turn on Developer mode, press Load unpacked and pick `dist/extension`, once; the profile remembers it.
 3. On the landing page press Start.
-   The recording page records itself; a second tab on the landing page shows the chunks landing; a reload of the recording page rejoins its recording; closing the tab still lands it; Done finalizes it, and Play scrubs it.
+   The recording page records itself; a second tab on the landing page shows the chunks landing; a reload of the recording page rejoins its recording; closing the tab still lands it; Play streams it while recording, Done adds the end marker, and the player keeps the full timeline for seeking.
 
 On a managed Mac whose Chrome policy blocks extensions, `scripts/demo/chrome.sh --chromium` runs the demo in Playwright's Chromium instead, which takes the extension from the command line and reads no Google Chrome policy; every Google Chrome channel or copy on that Mac would read the same policies and inherit the block.
-The demo backend is one Go binary with the demo pages embedded; it keeps its recordings in `.build-demo/recordings/` and needs `ffmpeg` on the path, which `./provision.sh` installs.
+The demo backend is one Go binary with the demo pages embedded; it keeps its recordings in `.build-demo/recordings/` and requires no media processing tools.
 It is also the reference implementation of the upload contract, written in the client's language so their backend can be read against it: [`backend/`](backend/), standard library only.
 A fleet's Chrome is not launched with the flag; there, one press of Cmd+Shift+Y on the tab is what allows capture, and the recording page says so when it is needed.
+
+## Recording and playback contract
+
+The extension records H.264 in fragmented MP4, preferring AAC audio and falling back to Opus if AAC recording is unavailable.
+It refuses unsupported codecs rather than falling back to VP9 or WebM.
+The extension separates the MP4 initialization data and complete `moof`/`mdat` fragments without changing their bytes, then spools and uploads them in order.
+`timesliceMs` controls recorder callbacks; callbacks can contain partial boxes or multiple fragments, so callback counts and uploaded segment counts can differ.
+
+`POST /api/recordings/{id}/chunks/{sequence}` uploads one initialization or media segment with these headers:
+
+| Header | Value |
+| ------ | ----- |
+| `Content-Type` | The selected MP4 codec MIME type |
+| `X-Recording-Key` | The recording key |
+| `X-Chunk-Kind` | `init` for sequence 1, then `media` |
+| `X-Chunk-Duration-Ms` | Fractional milliseconds from MP4 sample durations; zero for initialization |
+| `X-Chunk-Start-Ms`, `X-Chunk-End-Ms` | Recorder callback interval from `performance.now()`, relative to capture start |
+
+Callback timing measures elapsed capture time independently of upload delay and is kept alongside each segment.
+If a callback yields multiple fragments, those fragments share its callback interval; HLS `EXTINF` uses each fragment's media duration to avoid drift from callback scheduling.
+The recorder requests keyframes every two seconds, and the backend accepts media fragments up to ten seconds so `EXT-X-TARGETDURATION:10` stays constant throughout the recording.
+The backend stores the uploaded bytes unchanged and atomically updates a stored `index.m3u8` after each upload, served at `/api/recordings/{id}/index.m3u8`, with `EXT-X-MAP`, fractional `EXTINF` durations and `PLAYLIST-TYPE:EVENT`.
+All segments remain in the playlist for DVR seeking.
+`meta.json` retains recording identity and upload bookkeeping; playback reads the stored playlist directly.
+On server restart, playlists are recovered from metadata, including recordings created before playlists were stored on disk.
+`POST /api/recordings/{id}/stop` takes `{ chunks, bytes, reason? }`, checks that all uploads arrived and adds `EXT-X-ENDLIST`.
+The demo uses bundled hls.js, with native HLS as a fallback, for both ongoing and finalized playback.
+Existing WebM recordings are not converted to HLS.
 
 ## What is not here yet
 

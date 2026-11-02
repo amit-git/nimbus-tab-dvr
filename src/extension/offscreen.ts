@@ -7,11 +7,12 @@
 // on after the next one starts.
 
 import type { CaptureOptions, ToOffscreen, ToServiceWorker } from '../shared/protocol';
+import { MP4Segments, type MP4Part } from './mp4';
 import { putChunk, putRecording, updateChunk, updateRecording } from './db';
 
 const LOG = '[nimbus-tab-dvr offscreen]';
 
-const MIME_CANDIDATES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+const MIME_CANDIDATES = ['video/mp4;codecs=avc1.42001E,mp4a.40.2', 'video/mp4;codecs=avc1.42001E,opus'];
 
 interface Active {
   recordingId: string;
@@ -27,13 +28,20 @@ interface Active {
   writes: Promise<void>[];
   uploads: Promise<void>;
   ended: boolean;
+  processing: Promise<void>;
+  segments: MP4Segments;
+  startedAt: number;
+  lastChunkAt: number;
 }
 
 let active: Active | undefined;
 
-function pickMimeType(preferred: string | undefined): string {
-  const candidates = preferred ? [preferred, ...MIME_CANDIDATES] : MIME_CANDIDATES;
-  return candidates.find((candidate) => MediaRecorder.isTypeSupported(candidate)) ?? '';
+function pickMimeType(preferred: string | undefined, audio: boolean): string {
+  const candidates = MIME_CANDIDATES.map((type) => audio ? type : type.split(',')[0]);
+  if (preferred && !candidates.includes(preferred)) throw new Error('Recording requires H.264 fragmented MP4');
+  const mimeType = (preferred ? [preferred] : candidates).find((type) => MediaRecorder.isTypeSupported(type));
+  if (!mimeType) throw new Error('H.264 MP4 recording is not supported by this browser');
+  return mimeType;
 }
 
 // Chrome's tab-capture constraints are the legacy `mandatory` form, which the DOM types do not
@@ -60,13 +68,20 @@ async function tellServiceWorker(message: ToServiceWorker['message']): Promise<v
 
 // One chunk to the backend. A failure is recorded and logged and the recording carries on;
 // the demo has no retry, so a backend that is down shows up as failed chunks in the console.
-async function upload(state: Active, sequence: number, data: Blob): Promise<void> {
+async function upload(state: Active, sequence: number, part: MP4Part, startMs: number, endMs: number): Promise<void> {
   const url = `${state.apiBaseUrl}/api/recordings/${state.recordingId}/chunks/${sequence}`;
   try {
     const response = await fetch(url, {
       method: 'POST',
-      body: data,
-      headers: { 'content-type': state.mimeType || 'video/webm', 'x-recording-key': state.recordingKey },
+      body: part.data,
+      headers: {
+        'content-type': state.mimeType,
+        'x-recording-key': state.recordingKey,
+        'x-chunk-kind': part.kind,
+        'x-chunk-duration-ms': String(part.durationMs),
+        'x-chunk-start-ms': String(startMs),
+        'x-chunk-end-ms': String(endMs),
+      },
     });
     if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
     state.uploaded += 1;
@@ -81,6 +96,7 @@ async function upload(state: Active, sequence: number, data: Blob): Promise<void
 async function start(message: Extract<ToOffscreen['message'], { type: 'start' }>): Promise<Record<string, unknown>> {
   if (active) return { ok: false, detail: `already recording ${active.recordingId}` };
 
+  const mimeType = pickMimeType(message.options.mimeType, message.options.audio);
   const stream = await navigator.mediaDevices.getUserMedia(constraints(message.streamId, message.options));
   const videoTrack = stream.getVideoTracks()[0];
   const audioTrack = stream.getAudioTracks()[0];
@@ -93,11 +109,12 @@ async function start(message: Extract<ToOffscreen['message'], { type: 'start' }>
     audioContext.createMediaStreamSource(stream).connect(audioContext.destination);
   }
 
-  const mimeType = pickMimeType(message.options.mimeType);
-  const recorder = new MediaRecorder(stream, {
-    mimeType: mimeType || undefined,
+  const recorderOptions = {
+    mimeType,
     videoBitsPerSecond: message.options.videoBitsPerSecond,
-  });
+    videoKeyFrameIntervalDuration: 2000,
+  };
+  const recorder = new MediaRecorder(stream, recorderOptions);
 
   const state: Active = {
     recordingId: message.recordingId,
@@ -113,6 +130,10 @@ async function start(message: Extract<ToOffscreen['message'], { type: 'start' }>
     writes: [],
     uploads: Promise.resolve(),
     ended: false,
+    processing: Promise.resolve(),
+    segments: new MP4Segments(),
+    startedAt: 0,
+    lastChunkAt: 0,
   };
   active = state;
 
@@ -130,23 +151,25 @@ async function start(message: Extract<ToOffscreen['message'], { type: 'start' }>
 
   recorder.ondataavailable = ({ data }) => {
     if (data.size === 0) return;
-    const sequence = ++state.sequence;
-    state.bytes += data.size;
-    const write = putChunk({
-      recordingId: state.recordingId,
-      recordingKey: state.recordingKey,
-      sequence,
-      createdAt: Date.now(),
-      mimeType: state.mimeType,
-      byteLength: data.size,
-      payload: data,
-      uploadState: 'queued',
-      retryCount: 0,
-    }).then(() => updateRecording(state.recordingId, { chunks: state.sequence, bytes: state.bytes }));
-    state.writes.push(write);
-    write.catch((error: unknown) => console.error(LOG, 'chunk write failed', sequence, error));
-    // Uploads chain in sequence behind the write, one in flight, so the backend sees them in order.
-    state.uploads = state.uploads.then(() => write.catch(() => undefined)).then(() => upload(state, sequence, data));
+    const endMs = performance.now() - state.startedAt;
+    const startMs = state.lastChunkAt;
+    state.lastChunkAt = endMs;
+    state.processing = state.processing.then(async () => {
+      for (const part of await state.segments.push(data)) {
+        const sequence = ++state.sequence;
+        state.bytes += part.data.size;
+        const write = putChunk({
+          recordingId: state.recordingId, recordingKey: state.recordingKey, sequence,
+          createdAt: Date.now(), mimeType: state.mimeType, byteLength: part.data.size,
+          payload: part.data, kind: part.kind, durationMs: part.durationMs, startMs, endMs,
+          uploadState: 'queued', retryCount: 0,
+        }).then(() => updateRecording(state.recordingId, { chunks: state.sequence, bytes: state.bytes }));
+        state.writes.push(write);
+        state.uploads = state.uploads.then(() => write).then(() => upload(state, sequence, part, startMs, endMs));
+        await write;
+      }
+    });
+    void state.processing.catch((error: unknown) => console.error(LOG, 'MP4 processing failed', error));
   };
 
   recorder.onerror = (event) => {
@@ -159,6 +182,7 @@ async function start(message: Extract<ToOffscreen['message'], { type: 'start' }>
     void endBecause('capture-ended');
   });
 
+  state.startedAt = performance.now();
   recorder.start(message.options.timesliceMs);
   console.log(LOG, 'recording', state.recordingId, state.mimeType, videoTrack.getSettings());
 
@@ -178,9 +202,14 @@ async function finish(state: Active): Promise<{ chunks: number; bytes: number }>
       state.recorder.stop();
     });
   }
-  await Promise.allSettled(state.writes);
-  for (const track of state.stream.getTracks()) track.stop();
-  await state.audioContext?.close();
+  try {
+    await state.processing;
+    state.segments.finish();
+  } finally {
+    for (const track of state.stream.getTracks()) track.stop();
+    await state.audioContext?.close();
+  }
+  await Promise.all(state.writes);
   return { chunks: state.sequence, bytes: state.bytes };
 }
 

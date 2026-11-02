@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 740" role="img" aria-label="Nimbus Tab DVR: a host page asks the extension's content script to start; the service worker validates the origin, asks Chrome for a tab capture stream id, and hands it to an offscreen document that encodes with MediaRecorder, writes every chunk to IndexedDB, then uploads it in order to the demo backend, which remuxes with ffmpeg at stop into a seekable file that the landing page plays.">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 740" role="img" aria-label="Nimbus Tab DVR: a host page asks the extension's content script to start; the service worker validates the origin, asks Chrome for a tab capture stream id, and hands it to an offscreen document that encodes with MediaRecorder, writes every chunk to IndexedDB, then uploads it in order to the demo backend, which publishes an HLS event playlist that the landing page plays with hls.js.">
   <!-- Copyright (C) 2026 Niels Joubert. SPDX-License-Identifier: MIT -->
   <defs>
     <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
@@ -56,8 +56,8 @@
 
     <rect x="440" y="390" width="400" height="130" rx="6" fill="#fff" stroke="#1c1c1c"/>
     <text x="455" y="415" font-size="13" font-weight="600">Offscreen document: the data plane</text>
-    <text x="455" y="435" font-size="11">getUserMedia(stream id) → MediaRecorder, VP9 + Opus WebM</text>
-    <text x="455" y="453" font-size="11">one timeslice = one chunk; audio replayed to the speakers</text>
+    <text x="455" y="435" font-size="11">getUserMedia → MediaRecorder, H.264 + AAC in MP4</text>
+    <text x="455" y="453" font-size="11">complete MP4 fragments; performance.now() callback timing</text>
     <text x="455" y="471" font-size="11">writes the chunk, then uploads it: in order, one in flight</text>
     <text x="455" y="489" font-size="11">after the last upload, posts stop and reports finalized</text>
     <line x1="560" y1="325" x2="560" y2="390" stroke="#1c1c1c" marker-end="url(#arrow)"/>
@@ -79,7 +79,7 @@
     <text x="945" y="240" font-size="13" font-weight="600">Landing page</text>
     <text x="945" y="260" font-size="11">lists the recordings and plays one</text>
     <text x="945" y="278" font-size="11">chunks and bytes tick while one is live</text>
-    <text x="945" y="296" font-size="11">the scrubber works: the file has cues</text>
+    <text x="945" y="296" font-size="11">hls.js: live playback, duration and DVR seeking</text>
 
     <!-- Backend region -->
     <rect x="920" y="392" width="300" height="308" rx="10" fill="none" stroke="#888" stroke-dasharray="6 4"/>
@@ -87,20 +87,20 @@
     <rect x="930" y="425" width="280" height="120" rx="6" fill="#fff" stroke="#1c1c1c"/>
     <text x="945" y="450" font-size="13" font-weight="600">Recordings API, Go, stdlib only</text>
     <text x="945" y="470" font-size="11">stores chunk n under recordings/id/</text>
-    <text x="945" y="488" font-size="11">stop: concatenate, then ffmpeg -c copy</text>
-    <text x="945" y="506" font-size="11">serves the list, and the file in ranges</text>
+    <text x="945" y="488" font-size="11">stores MP4 bytes unchanged; stop: ENDLIST</text>
+    <text x="945" y="506" font-size="11">serves the list, playlist and MP4 fragments</text>
     <text x="945" y="524" font-size="11">same origin as the demo, so no CORS</text>
     <rect x="930" y="595" width="280" height="75" rx="8" fill="#fff" stroke="#1c1c1c"/>
-    <text x="945" y="620" font-size="13" font-weight="600">recording.webm</text>
-    <text x="945" y="640" font-size="11">duration and cues, written by ffmpeg</text>
-    <text x="945" y="658" font-size="11">seekable in a video element</text>
+    <text x="945" y="620" font-size="13" font-weight="600">index.m3u8 + MP4 fragments</text>
+    <text x="945" y="640" font-size="11">sample durations in an HLS event playlist</text>
+    <text x="945" y="658" font-size="11">seekable through hls.js</text>
     <line x1="1070" y1="545" x2="1070" y2="595" stroke="#b8460e" stroke-width="1.5" marker-end="url(#arrow-chunk)"/>
-    <text x="1082" y="575" font-size="11" fill="#b8460e">remux at stop</text>
+    <text x="1082" y="575" font-size="11" fill="#b8460e">update HLS</text>
 
     <line x1="1010" y1="310" x2="1010" y2="425" stroke="#1c1c1c" marker-end="url(#arrow)"/>
     <line x1="1130" y1="425" x2="1130" y2="310" stroke="#1c1c1c" marker-end="url(#arrow)"/>
     <text x="1070" y="352" font-size="11" text-anchor="middle">↓ list, every second</text>
-    <text x="1070" y="370" font-size="11" text-anchor="middle">↑ file, in ranges</text>
+    <text x="1070" y="370" font-size="11" text-anchor="middle">↑ HLS playlist and segments</text>
 
     <line x1="840" y1="440" x2="930" y2="440" stroke="#b8460e" stroke-width="1.5" marker-end="url(#arrow-chunk)"/>
     <text x="885" y="432" font-size="11" text-anchor="middle" fill="#b8460e">POST chunk</text>

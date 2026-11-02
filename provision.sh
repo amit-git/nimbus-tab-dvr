@@ -16,7 +16,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 source scripts/lib/output.sh
 
 # The tools every checkout needs. Node carries the TypeScript toolchain through npm; Go builds
-# the demo backend; ffmpeg is what the backend remuxes with and the test measures with; the
+# the demo backend; ffmpeg supplies ffprobe for the capture spike tests; the
 # rest is the repository's own checks and the GitHub flow.
 BREW_PACKAGES=(prek shellcheck gh jq node go ffmpeg)
 

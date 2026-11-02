@@ -6,17 +6,18 @@
 //
 // It serves the built demo application from files embedded at build time and, on the same
 // origin so the page needs no CORS, a recordings API that takes each chunk as the extension
-// produces it, remuxes the whole with ffmpeg at stop so the file has a duration and cues,
-// and serves the result with range requests so a scrubber works.
+// produces it, stores MP4 bytes unchanged and serves an ongoing HLS event playlist.
+// Stop adds the end marker; the browser handles playback and seeking with hls.js.
 //
 // Usage: nimbus-demo-backend [-listen ADDR] [-data DIR] [-static DIR] [-pack-listen ADDR] [-pack-dir DIR]
 //
 // The routes:
 //
-//	POST   /api/recordings/{id}/chunks/{sequence}   body: the chunk; headers: X-Recording-Key, Content-Type
+//	POST   /api/recordings/{id}/chunks/{sequence}   body: the chunk; headers: Content-Type, X-Recording-Key, X-Chunk-{Kind,Duration-Ms,Start-Ms,End-Ms}
 //	POST   /api/recordings/{id}/stop                body: { chunks, bytes, reason? }
 //	GET    /api/recordings                          every recording, newest first
-//	GET    /api/recordings/{id}.webm                the finalized file, range requests honoured
+//	GET    /api/recordings/{id}/index.m3u8          ongoing or finalized HLS event playlist
+//	GET    /api/recordings/{id}/{asset}             init.mp4 or a numbered .m4s segment
 //	DELETE /api/recordings/{id}
 //
 // -static serves the demo pages from a directory instead of the embedded copy, for editing

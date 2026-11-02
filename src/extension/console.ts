@@ -19,7 +19,7 @@ async function status(): Promise<Status> {
 
 export async function assemble(recordingId: string): Promise<Blob> {
   const chunks = await listChunks(recordingId);
-  const mimeType = chunks[0]?.mimeType ?? 'video/webm';
+  const mimeType = chunks[0]?.mimeType ?? 'video/mp4';
   return new Blob(
     chunks.map((chunk) => chunk.payload),
     { type: mimeType },
@@ -31,7 +31,7 @@ async function download(recording: RecordingRecord): Promise<void> {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `${recording.recordingKey}-${recording.recordingId.slice(0, 8)}.webm`;
+  anchor.download = `${recording.recordingKey}-${recording.recordingId.slice(0, 8)}.${recording.mimeType.startsWith('video/mp4') ? 'mp4' : 'webm'}`;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

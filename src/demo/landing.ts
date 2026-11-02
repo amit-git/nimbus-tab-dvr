@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Niels Joubert
 // SPDX-License-Identifier: MIT
 
+import Hls from 'hls.js';
 import type { BackendRecording } from './bridge';
 import { announceExtension, formatBytes, listBackendRecordings, log, onExtensionEvent, showReply, wireProbe } from './bridge';
 
@@ -37,16 +38,37 @@ function cell(text: string, className = ''): HTMLTableCellElement {
   return td;
 }
 
+let hls: Hls | undefined;
+
 function play(recording: BackendRecording): void {
-  player.src = recording.url ?? '';
+  hls?.destroy();
+  hls = undefined;
+  const url = recording.url ?? '';
+  if (Hls.isSupported()) {
+    hls = new Hls({ startPosition: 0 });
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      if (data.fatal) playing.textContent = `Playback failed: ${data.details}`;
+    });
+    hls.loadSource(url);
+    hls.attachMedia(player);
+    hls.on(Hls.Events.MANIFEST_PARSED, () => void player.play().catch((error: unknown) => log(String(error))));
+  } else if (player.canPlayType('application/vnd.apple.mpegurl')) {
+    player.src = url;
+    void player.play().catch((error: unknown) => log(String(error)));
+  } else {
+    playing.textContent = 'HLS playback is not supported in this browser';
+    return;
+  }
   player.dataset.recordingId = recording.id;
   playing.textContent = `${recording.key} (${recording.id.slice(0, 8)}), ${recording.durationSeconds?.toFixed(1) ?? '?'} s`;
-  void player.play();
+
 }
 
 async function remove(recording: BackendRecording): Promise<void> {
   await fetch(`/api/recordings/${recording.id}`, { method: 'DELETE' });
   if (player.dataset.recordingId === recording.id) {
+    hls?.destroy();
+    hls = undefined;
     player.removeAttribute('src');
     player.load();
     playing.textContent = '';
@@ -70,7 +92,7 @@ function render(recordings: BackendRecording[]): void {
       cell(duration, 'duration'),
     );
     const actions = document.createElement('td');
-    if (recording.state === 'finalized') {
+    if (recording.url?.endsWith('.m3u8') && recording.chunks > 1) {
       const playButton = document.createElement('button');
       playButton.textContent = 'Play';
       playButton.className = 'play';

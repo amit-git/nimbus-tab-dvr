@@ -155,6 +155,10 @@ export interface ChunkRecord {
   mimeType: string;
   byteLength: number;
   payload: Blob;
+  kind?: 'init' | 'media';
+  durationMs?: number;
+  startMs?: number;
+  endMs?: number;
   uploadState: 'queued' | 'uploaded' | 'failed';
   retryCount: number;
 }

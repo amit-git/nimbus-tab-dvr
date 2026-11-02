@@ -6,11 +6,14 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
-	"strings"
 )
 
 // The page shares this origin and needs no CORS; the extension's origin is
@@ -20,7 +23,7 @@ func cors(w http.ResponseWriter) {
 	h := w.Header()
 	h.Set("Access-Control-Allow-Origin", "*")
 	h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-	h.Set("Access-Control-Allow-Headers", "Content-Type, X-Recording-Key")
+	h.Set("Access-Control-Allow-Headers", "Content-Type, X-Recording-Key, X-Chunk-Kind, X-Chunk-Duration-Ms, X-Chunk-Start-Ms, X-Chunk-End-Ms")
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {
@@ -38,13 +41,15 @@ func writeError(w http.ResponseWriter, status int, err error) {
 }
 
 func recordingID(w http.ResponseWriter, r *http.Request) (string, bool) {
-	id := strings.TrimSuffix(r.PathValue("id"), ".webm")
+	id := r.PathValue("id")
 	if !validID.MatchString(id) {
 		writeError(w, http.StatusBadRequest, errors.New("bad recording id"))
 		return "", false
 	}
 	return id, true
 }
+
+var validSegment = regexp.MustCompile(`^[0-9]{6,}\.m4s$`)
 
 func registerAPI(mux *http.ServeMux, store *Store) {
 	mux.HandleFunc("OPTIONS /api/", func(w http.ResponseWriter, r *http.Request) {
@@ -71,14 +76,29 @@ func registerAPI(mux *http.ServeMux, store *Store) {
 			writeError(w, http.StatusBadRequest, errors.New("bad sequence"))
 			return
 		}
-		payload, err := io.ReadAll(r.Body)
+		part := Chunk{Sequence: sequence, Kind: r.Header.Get("X-Chunk-Kind")}
+		values := []*float64{&part.DurationMs, &part.StartMs, &part.EndMs}
+		for i, name := range []string{"X-Chunk-Duration-Ms", "X-Chunk-Start-Ms", "X-Chunk-End-Ms"} {
+			value, err := strconv.ParseFloat(r.Header.Get(name), 64)
+			if err != nil {
+				writeError(w, http.StatusBadRequest, fmt.Errorf("invalid %s", name))
+				return
+			}
+			*values[i] = value
+		}
+		payload, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<20))
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		rec, err := store.PutChunk(id, sequence, r.Header.Get("X-Recording-Key"), r.Header.Get("Content-Type"), payload)
+		part.Bytes = int64(len(payload))
+		rec, err := store.PutChunk(id, sequence, r.Header.Get("X-Recording-Key"), r.Header.Get("Content-Type"), payload, part)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err)
+			status := http.StatusInternalServerError
+			if errors.Is(err, errInvalid) {
+				status = http.StatusConflict
+			}
+			writeError(w, status, err)
 			return
 		}
 		writeJSON(w, http.StatusOK, rec)
@@ -91,15 +111,19 @@ func registerAPI(mux *http.ServeMux, store *Store) {
 		}
 		var body struct {
 			Reason string `json:"reason"`
+			Chunks int    `json:"chunks"`
+			Bytes  int64  `json:"bytes"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
 			writeError(w, http.StatusBadRequest, err)
 			return
 		}
-		rec, err := store.Finalize(id, body.Reason)
+		rec, err := store.Finalize(id, body.Reason, body.Chunks, body.Bytes)
 		switch {
 		case errors.Is(err, errNotFound):
 			writeError(w, http.StatusNotFound, err)
+		case errors.Is(err, errInvalid):
+			writeError(w, http.StatusConflict, err)
 		case err != nil:
 			log.Printf("finalize %s: %v", id, err)
 			writeJSON(w, http.StatusInternalServerError, rec)
@@ -109,24 +133,28 @@ func registerAPI(mux *http.ServeMux, store *Store) {
 		}
 	})
 
-	// http.ServeFile answers Range requests, which is what lets the scrubber seek.
-	mux.HandleFunc("GET /api/recordings/{id}", func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasSuffix(r.PathValue("id"), ".webm") {
-			http.NotFound(w, r)
-			return
-		}
+	mux.HandleFunc("GET /api/recordings/{id}/{asset}", func(w http.ResponseWriter, r *http.Request) {
 		id, ok := recordingID(w, r)
 		if !ok {
 			return
 		}
-		path, err := store.FilePath(id)
-		if err != nil {
-			writeError(w, http.StatusNotFound, errors.New("recording "+id+" is not finalized"))
+		asset := r.PathValue("asset")
+		cors(w)
+		w.Header().Set("Cache-Control", "no-store")
+		if asset != "index.m3u8" && asset != "init.mp4" && !validSegment.MatchString(asset) {
+			http.NotFound(w, r)
 			return
 		}
-		cors(w)
-		w.Header().Set("Content-Type", "video/webm")
-		w.Header().Set("Cache-Control", "no-store")
+		path := filepath.Join(store.dir(id), asset)
+		if _, err := os.Stat(path); err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		if asset == "index.m3u8" {
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+		} else {
+			w.Header().Set("Content-Type", "video/mp4")
+		}
 		http.ServeFile(w, r, path)
 	})
 

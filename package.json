@@ -27,5 +27,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
   },
-  "private": true
+  "private": true,
+  "dependencies": {
+    "hls.js": "^1.7.4"
+  }
 }

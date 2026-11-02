@@ -7,9 +7,8 @@
 // allowlist flag, and the backend Playwright starts from scripts/demo/serve.mjs.
 
 import { chromium, expect, test, type BrowserContext, type Page } from '@playwright/test';
-import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -87,12 +86,12 @@ async function statusJson(page: Page, pattern: RegExp): Promise<Record<string, u
   return JSON.parse((await status.textContent()) ?? '{}') as Record<string, unknown>;
 }
 
-async function startRecording(page: Page): Promise<Record<string, unknown>> {
+async function startRecording(page: Page, audio = true): Promise<Record<string, unknown>> {
   await page.goto(DEMO);
   await expect(page.locator('#extension')).toHaveAttribute('data-state', 'found', { timeout: 10_000 });
   await expect(page.locator('#backend')).toHaveAttribute('data-state', 'up', { timeout: 10_000 });
   await page.locator('#timeslice').fill(String(TIMESLICE_MS));
-  await page.locator('#audio').setChecked(true);
+  await page.locator('#audio').setChecked(audio);
   await page.locator('#start').click();
   await page.waitForURL(/record\.html/);
   const started = await statusJson(page, /RECORDING_(STARTED|ERROR)/);
@@ -100,17 +99,9 @@ async function startRecording(page: Page): Promise<Record<string, unknown>> {
   return started;
 }
 
-function ffprobeDuration(path: string): number {
-  const run = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', path], {
-    encoding: 'utf8',
-  });
-  expect(run.status, run.stderr).toBe(0);
-  return Number(run.stdout.trim());
-}
-
 test.describe.configure({ mode: 'serial' });
 
-test('chunks land as they are produced, and a stop finalizes into a seekable file', async () => {
+test('chunks land live and HLS finalizes with duration and seeking', async () => {
   const page = await context.newPage();
   const started = await startRecording(page);
   const id = String(started.recordingId);
@@ -118,9 +109,13 @@ test('chunks land as they are produced, and a stop finalizes into a seekable fil
   await expect
     .poll(async () => (await backendRecording(id))?.chunks ?? 0, { timeout: 15_000, message: 'chunks landing' })
     .toBeGreaterThanOrEqual(2);
+  expect(String(started.mimeType)).toContain('avc1');
   const live = await backendRecording(id);
   finding(`while recording: backend has ${live?.chunks} chunks, ${live?.bytes} bytes, state ${live?.state}`);
   expect(live?.state).toBe('recording');
+  const liveManifest = await context.request.get(`${DEMO}${live!.url!.slice(1)}`);
+  expect(await liveManifest.text()).toContain('#EXTINF:');
+  expect(await liveManifest.text()).not.toContain('#EXT-X-ENDLIST');
 
   const stopAt = Date.now();
   await page.locator('#done').click();
@@ -137,17 +132,53 @@ test('chunks land as they are produced, and a stop finalizes into a seekable fil
   expect(backend.bytes).toBe(Number(finalized.bytes));
   expect(backend.durationSeconds).toBeGreaterThan(0);
 
-  const file = await context.request.get(`${DEMO}api/recordings/${id}.webm`);
-  const path = join(OUT, 'stopped.webm');
-  writeFileSync(path, await file.body());
-  const duration = ffprobeDuration(path);
-  finding(`served file: ${duration.toFixed(2)} s by ffprobe, backend says ${backend.durationSeconds}`);
-  expect(duration).toBeGreaterThan(1);
+  const manifest = await context.request.get(`${DEMO}${backend.url!.slice(1)}`);
+  const text = await manifest.text();
+  expect(text).toContain('#EXT-X-ENDLIST');
+  expect(text).toContain('#EXT-X-MAP:URI="init.mp4"');
+  const durations = [...text.matchAll(/#EXTINF:([0-9.]+)/g)].map((m) => Number(m[1]));
+  expect(durations.reduce((a, b) => a + b, 0)).toBeCloseTo(backend.durationSeconds!, 4);
 
   await page.waitForURL(/index\.html|\/$/, { timeout: 10_000 });
-  await expect(page.locator(`tr[data-recording-id="${id}"]`)).toHaveAttribute('data-state', 'finalized');
-  await expect(page.locator(`tr[data-recording-id="${id}"] button.play`)).toBeVisible();
+  const row = page.locator(`tr[data-recording-id="${id}"]`);
+  await expect(row).toHaveAttribute('data-state', 'finalized');
+  await row.locator('button.play').click();
+  const video = page.locator('#player');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => Number.isFinite(v.duration) ? v.duration : 0), { timeout: 15000 }).toBeGreaterThan(0);
+  const duration = await video.evaluate((v: HTMLVideoElement) => { v.pause(); return v.duration; });
+  expect(duration).toBeCloseTo(backend.durationSeconds!, 0);
+  // Seek forwards and backwards, including a position in a later fragment.
+  for (const target of [duration * 0.75, duration * 0.15]) {
+    await video.evaluate((v: HTMLVideoElement, time) => { v.currentTime = time; }, target);
+    await expect.poll(() => video.evaluate((v: HTMLVideoElement) => !v.seeking && v.readyState >= 2), { timeout: 10000 }).toBe(true);
+    expect(await video.evaluate((v: HTMLVideoElement) => v.currentTime)).toBeCloseTo(target, 1);
+  }
+  finding(`HLS duration ${duration.toFixed(3)} s; forward and backward seeking passed`);
   await page.close();
+});
+
+test('live HLS grows, permits seeking, and becomes finite after stop without reloading the player', async () => {
+  const capture = await context.newPage();
+  const started = await startRecording(capture);
+  const id = String(started.recordingId);
+  await expect.poll(async () => (await backendRecording(id))?.chunks ?? 0, { timeout: 15000 }).toBeGreaterThanOrEqual(3);
+  const viewer = await context.newPage();
+  await viewer.goto(DEMO);
+  await viewer.locator(`tr[data-recording-id="${id}"] button.play`).click();
+  const video = viewer.locator('#player');
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 15000 }).toBeGreaterThanOrEqual(2);
+  const initial = await video.evaluate((v: HTMLVideoElement) => { v.pause(); return v.duration; });
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.duration), { timeout: 20000 }).toBeGreaterThan(initial + 1);
+  await video.evaluate((v: HTMLVideoElement) => { v.currentTime = 0.5; });
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => !v.seeking && v.readyState >= 2)).toBe(true);
+  await capture.locator('#done').click();
+  const rec = await waitForBackendState(id, 'finalized', 10000);
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.duration), { timeout: 25000 }).toBeCloseTo(rec.durationSeconds!, 0);
+  await video.evaluate((v: HTMLVideoElement) => { v.currentTime = v.duration - 0.5; void v.play(); });
+  await expect.poll(() => video.evaluate((v: HTMLVideoElement) => v.ended), { timeout: 15000 }).toBe(true);
+  finding(`live HLS grew from ${initial.toFixed(3)} s to ${rec.durationSeconds!.toFixed(3)} s and ended without a player reload`);
+  await viewer.close();
+  await capture.close();
 });
 
 test('a reloaded page rejoins its recording and the count keeps climbing', async () => {
@@ -196,4 +227,19 @@ test('a closed tab ends the recording and its last chunks still land', async () 
   await landing.goto(DEMO);
   await expect(landing.locator(`tr[data-recording-id="${id}"]`)).toHaveAttribute('data-state', 'finalized', { timeout: 5000 });
   await landing.close();
+});
+
+test('H.264 video-only recording plays through HLS', async () => {
+  const page = await context.newPage();
+  const started = await startRecording(page, false);
+  expect(started.audio).toBe(false);
+  const id = String(started.recordingId);
+  await expect.poll(async () => (await backendRecording(id))?.chunks ?? 0, { timeout: 15000 }).toBeGreaterThanOrEqual(3);
+  await page.locator('#done').click();
+  const rec = await waitForBackendState(id, 'finalized', 10000);
+  await page.waitForURL(/index\.html|\/$/);
+  await page.locator(`tr[data-recording-id="${id}"] button.play`).click();
+  await expect.poll(() => page.locator('#player').evaluate((v: HTMLVideoElement) => v.readyState), { timeout: 15000 }).toBeGreaterThanOrEqual(2);
+  expect(await page.locator('#player').evaluate((v: HTMLVideoElement) => v.duration)).toBeCloseTo(rec.durationSeconds!, 0);
+  await page.close();
 });

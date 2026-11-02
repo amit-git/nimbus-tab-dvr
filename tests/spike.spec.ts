@@ -194,7 +194,7 @@ interface Probed {
   lastSeconds: number;
 }
 
-// A MediaRecorder WebM carries no duration or cues, so the file is measured by reading it:
+// The raw recording is measured by reading its packets:
 // how many packets ffprobe can parse and the timestamp of the last one.
 function ffprobe(path: string): Probed | null {
   const run = spawnSync(
@@ -230,13 +230,13 @@ async function downloadRecording(recordingId: string, name: string): Promise<str
   const row = consolePage.locator(`tr[data-recording-id="${recordingId}"]`);
   await expect(row).toBeVisible();
   const [download] = await Promise.all([consolePage.waitForEvent('download'), row.locator('button.download').click()]);
-  const path = join(OUT, `${name}.webm`);
+  const path = join(OUT, `${name}.mp4`);
   await download.saveAs(path);
   await consolePage.close();
   const probed = ffprobe(path);
   if (probed) {
     finding(
-      `${name}.webm: ${probed.format}, streams [${probed.streams.join(', ')}], ${probed.packets} packets, last video packet at ${probed.lastSeconds.toFixed(2)} s`,
+      `${name}.mp4: ${probed.format}, streams [${probed.streams.join(', ')}], ${probed.packets} packets, last video packet at ${probed.lastSeconds.toFixed(2)} s`,
     );
     expect(probed.packets).toBeGreaterThan(0);
     expect(probed.lastSeconds).toBeGreaterThan(0);
